@@ -1,0 +1,4 @@
+.gitignore
+/venv
+.idea
+.DS_STORE

@@ -1,0 +1,11 @@
+{
+    "current_dataset": "gigaword",
+    "datasets": [
+        {
+            "name": "gigaword",
+            "path": "./datasets/",
+            "save_in_memory": true,
+            "try_loading": true
+        }
+    ]
+}
