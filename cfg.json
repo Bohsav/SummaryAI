@@ -1,14 +1,16 @@
 {
     "current_dataset": "gigaword",
-    "datasets_directory": "datasets",
+    "datasets_directory": "local_datasets",
     "load_data_validate": ["gigaword"],
+    "load_data_create_csv": true,
     "datasets": {
         "gigaword": {
             "name": "gigaword",
             "force_download": false,
             "num_workers": 0,
             "trust_remote_code": false,
-            "view_csv": true
+            "stream": false
         }
-    }
+    },
+    "device": "cpu"
 }
