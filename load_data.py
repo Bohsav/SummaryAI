@@ -24,9 +24,8 @@ class Loader:
                                download_mode=download_mode,
                                num_proc=num_proc,
                                trust_remote_code=cfg_file["datasets"][current_dataset_name]["trust_remote_code"],
-                               cache_dir=f"./{cfg_file["datasets_directory"]}"
-                                         f"/{cfg_file["datasets"][current_dataset_name]["name"]}"
-                                         f"/cache",
+                               cache_dir="{}/{}/cache".format(cfg_file["dataset_directory"],
+                                                              cfg_file["datasets"][current_dataset_name]["name"]),
                                streaming=cfg_file["datasets"][current_dataset_name]["stream"]
                                )
         return dataset
