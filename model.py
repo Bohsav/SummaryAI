@@ -4,7 +4,7 @@ from torch import nn
 import math
 
 
-def generate_decoder_mask(size: int, device: str):
+def generate_decoder_mask(size: int, device: str) -> torch.Tensor:
     return torch.triu(torch.ones(size, size) * float('-inf'), diagonal=1).to(device)
 
 
@@ -20,7 +20,7 @@ class SinusoidalPositionalEncoding(nn.Module):
         self.encoding = self.encoding.unsqueeze(0).transpose(0, 1)  # [max_len, 1, model_dim]
         self.register_buffer('pe', self.encoding)
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = x + self.pe[:x.size(0), :]
         return x
 
@@ -30,20 +30,20 @@ class LearnablePositionalEncoding(nn.Module):
         super(LearnablePositionalEncoding, self).__init__()
         self.pos_embed = nn.Embedding(max_len, model_dim)
 
-    def forward(self, x: torch.Tensor):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         seq_len, batch_size = x.size()
         pos_idx = torch.arange(0, seq_len, dtype=torch.long, device=x.device).unsqueeze(1).repeat(1, batch_size)
         return x + self.pos_embed(pos_idx)
 
 
-class CustomEmbedding(nn.Module):
+class TransformerEmbedding(nn.Module):
     def __init__(self,
                  vocab_size: int,
                  model_dim: int,
                  max_len: int,
                  learnable_pos_embeddings: Optional[bool] = False,
                  dropout_prob: Optional[float] = 0.1):
-        super(CustomEmbedding, self).__init__()
+        super(TransformerEmbedding, self).__init__()
         self.token_embed = nn.Embedding(vocab_size, model_dim)
         if learnable_pos_embeddings:
             self.pos_embed = LearnablePositionalEncoding(model_dim, max_len)
@@ -52,7 +52,7 @@ class CustomEmbedding(nn.Module):
 
         self.dropout = nn.Dropout(dropout_prob) if dropout_prob != 0.0 else nn.Identity()
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.token_embed(x)
         x = self.pos_embed(x)
         return self.dropout(x)
@@ -86,7 +86,7 @@ class BaseTransformerModel(nn.Module):
                src_attn_mask: Optional[torch.Tensor] = None,
                src_padding_mask: Optional[torch.Tensor] = None,
                is_src_attn_mask_causal: Optional[bool] = False
-               ):
+               ) -> torch.Tensor:
         memory = src
         for encoder in self.encoders_stack:
             memory = encoder(memory, src_attn_mask, src_padding_mask, is_src_attn_mask_causal)
@@ -101,7 +101,7 @@ class BaseTransformerModel(nn.Module):
                memory_padding_mask: Optional[torch.Tensor] = None,
                is_tgt_attn_mask_causal: Optional[bool] = False,
                is_memory_attn_mask_causal: Optional[bool] = False
-               ):
+               ) -> torch.Tensor:
         decoder_output = tgt
         for decoder in self.decoders_stack:
             decoder_output = decoder(decoder_output,
@@ -128,7 +128,7 @@ class BaseTransformerModel(nn.Module):
                 tgt_attn_mask: Optional[torch.Tensor] = None,
                 tgt_padding_mask: Optional[torch.Tensor] = None,
                 is_tgt_attn_mask_causal: Optional[bool] = False
-                ):
+                ) -> torch.Tensor:
         if (src is not None) and (tgt is None) and (memory is None):
             return self.encode(src, src_attn_mask, src_padding_mask, is_src_attn_mask_causal)
         elif (src is None) and (tgt is not None) and (memory is not None):

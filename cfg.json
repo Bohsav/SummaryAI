@@ -1,7 +1,7 @@
 {
     "datasets_directory": "local_datasets",
-    "load_data_validate": ["gigaword"],
-    "load_data_create_csv": true,
+    "dataloader_validate": ["gigaword"],
+    "dataloader_create_csv": true,
     "datasets": {
         "gigaword": {
             "name": "gigaword",
@@ -11,5 +11,5 @@
             "stream": false
         }
     },
-    "device": "cpu"
+    "device": "best"
 }

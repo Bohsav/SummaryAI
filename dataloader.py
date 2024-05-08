@@ -3,11 +3,14 @@ from datasets import load_dataset, DownloadMode
 import json
 import os
 
-def save_loaded_dataset(cfg_file: dict, loaded_dataset_name: str, cached_dataset):
-    for split in cached_dataset.keys():
-        cached_dataset[split].to_csv(
-            os.path.join(cfg_file["datasets_directory"], cfg_file["datasets"][loaded_dataset_name]["name"], f"{split}")
-        )
+
+def save_loaded_dataset(loaded_dataset_name: str, cached_dataset):
+    with open("cfg.json") as f:
+        cfg_file = json.load(f)
+        for split in cached_dataset.keys():
+            cached_dataset[split].to_csv(
+                os.path.join(cfg_file["datasets_directory"], cfg_file["datasets"][loaded_dataset_name]["name"], f"{split}")
+            )
 
 
 def load_gigaword():
@@ -35,10 +38,10 @@ supported_datasets = {
 }
 
 
-def build_torch_dataset(available_dataset_name: str, split: str, transform: Optional[list] = None,
-                        target_transform: Optional[list] = None):
-    torch_dataset = supported_datasets[available_dataset_name]()[split].set_format(type="torch")
-    return torch_dataset
+# def build_torch_dataset(available_dataset_name: str, split: str, transform: Optional[list] = None,
+#                         target_transform: Optional[list] = None):
+#     torch_dataset = supported_datasets[available_dataset_name]()[split].set_format(type="torch")
+#     return torch_dataset
 
 
 if __name__ == "__main__":
@@ -50,11 +53,11 @@ if __name__ == "__main__":
 
         good_val = []
         failed_val = []
-        for dataset_name in config["load_data_validate"]:
+        for dataset_name in config["dataloader_validate"]:
             try:
                 loaded_dataset = supported_datasets[dataset_name]()
-                if config["load_data_create_csv"]:
-                    save_loaded_dataset(config, dataset_name, loaded_dataset)
+                if config["dataloader_create_csv"]:
+                    save_loaded_dataset(dataset_name, loaded_dataset)
                 good_val.append(dataset_name)
             except Exception as e:
                 failed_val.append("{}. Reason: {}".format(dataset_name, e.__str__()))

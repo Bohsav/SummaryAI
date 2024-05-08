@@ -5,3 +5,5 @@
 .cache
 /local_datasets
 scratch.py
+__pycache__
+notes.txt
