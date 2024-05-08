@@ -7,3 +7,5 @@
 scratch.py
 __pycache__
 notes.txt
+/local_tokenizers
+/temp

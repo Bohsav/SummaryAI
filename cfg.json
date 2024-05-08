@@ -2,6 +2,7 @@
     "datasets_directory": "local_datasets",
     "dataloader_validate": ["gigaword"],
     "dataloader_create_csv": true,
+    "device": "best",
     "datasets": {
         "gigaword": {
             "name": "gigaword",
@@ -11,5 +12,24 @@
             "stream": false
         }
     },
-    "device": "best"
+    "tokenizers_directory": "local_tokenizers",
+    "tokenizers": {
+        "sentencepiece": {
+            "model_name": "spm_m",
+            "version": "1_0",
+            "vocab_size": 8000,
+            "force_train": false,
+            "num_workers": 16,
+            "train_datasets": ["gigaword"],
+            "input_file": ""
+        }
+    },
+    "models": {
+        "transformer": {
+            "model_dim": 512,
+            "inner_ff_dim": 2048,
+            "n_encoders": 6,
+            "n_decoders": 6
+        }
+    }
 }
