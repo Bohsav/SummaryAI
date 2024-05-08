@@ -1,5 +1,4 @@
 {
-    "current_dataset": "gigaword",
     "datasets_directory": "local_datasets",
     "load_data_validate": ["gigaword"],
     "load_data_create_csv": true,
