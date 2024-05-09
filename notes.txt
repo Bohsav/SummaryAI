@@ -1,4 +1,0 @@
-cfg is the controller panel for the whole application
-Run dataloader.py to load the datasets from dataloader_validate list in cfg.json
-In cfg.json device accepts "best", "mps", "cpu", and "cuda" however the functionality is not implemented.
-    Although, in the future it is planned to automatically cast everything to device.
