@@ -1,3 +1,7 @@
-import tokenizer
+ex = {
+    "1": 3,
+    "2": 0
+}
 
-tokenizer.generate_directory("sentencepiece")
+for e in ex:
+    print(e)

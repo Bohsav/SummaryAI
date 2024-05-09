@@ -1,66 +1,64 @@
 import sentencepiece as spm
 import json
 import os
+import dataloader
 
 
-def generate_directory(dir_name: str):
-    config = None
-    with open("cfg.json") as f:
-        config = json.load(f)
-    current_dirs = os.listdir()
-    current_path = "./"
-    if not (config["tokenizers_directory"] in current_dirs):
-        os.mkdir(config["tokenizers_directory"])
-    current_path = os.path.join(current_path, config["tokenizers_directory"])
-
-    current_dirs = os.listdir(current_path)
-    if not (dir_name in current_dirs):
-        os.mkdir(os.path.join(current_path, dir_name))
-
-    return os.path.join(current_path, dir_name)
-
-
-def dataset_to_vocab_txt(datasets):
-    
+def generate_directories(dir_dict: dict, current_path: str = "./"):
+    if dir_dict == {}:
+        return
+    for directory in dir_dict:
+        if not os.path.exists(os.path.join(current_path, directory)):
+            os.mkdir(os.path.join(current_path, directory))
+        generate_directories(dir_dict[directory], os.path.join(current_path, directory))
 
 
 def get_sentencepiece_model():
-    config = None
     with open("cfg.json") as f:
         config = json.load(f)
-    current_path = generate_directory("sentencepiece")
 
-    temp_path = os.path.join(current_path, "{}_{}".format(config["tokenizers"]["sentencepiece"]["model_name"],
-                                                          config["tokenizers"]["sentencepiece"]["version"]))
-    if not os.path.exists(temp_path):
-        os.mkdir(temp_path)
+    generate_directories(
+        {"{}".format(config["tokenizers_directory"]): {
+            "sentencepiece": {
+                "{}_{}".format(config["tokenizers"]["sentencepiece"]["model_name"],
+                               config["tokenizers"]["sentencepiece"]["version"]): {}
+            }
+        }
+        }
+    )
+
+    current_path = os.path.join("./",
+                                config["tokenizers_directory"],
+                                "sentencepiece",
+                                "{}_{}".format(config["tokenizers"]["sentencepiece"]["model_name"],
+                                               config["tokenizers"]["sentencepiece"]["version"]))
 
     training_file = config["tokenizers"]["sentencepiece"]["input_file"]
-    if training_file == "":
-        training_file = dataset_to_vocab_txt(config["tokenizers"]["sentencepiece"]["train_datasets"])
 
     if config["tokenizers"]["sentencepiece"]["force_train"]:
-        inquiry = "--input={} --model-prefix={}_{} --num_threads={}".format(
+        inquiry = "--input={} --model-prefix={} --num_threads={}".format(
             training_file,
-            "{}/{}".format(temp_path, config["tokenizers"]["sentencepiece"]["model_name"]),
-            config["tokenizers"]["sentencepiece"]["version"],
+
+            "{}/{}_{}".format(current_path,
+                              config["tokenizers"]["sentencepiece"]["model_name"],
+                              config["tokenizers"]["sentencepiece"]["version"]),
+
             config["tokenizers"]["sentencepiece"]["num_workers"]
         )
-        info_txt = ("Log:\n"
-                    "Trained on: {}\n"
-                    "Using: {}\n").format(config["tokenizers"]["sentencepiece"]["train_datasets"].join(" "),
-                                          training_file)
+
+        info_txt = "Log:\nTrained on: {}\n".format(training_file)
         spm.SentencePieceTrainer.Train(inquiry)
-        with open(os.path.join(temp_path, "info.txt"), "w") as f:
+        with open(os.path.join(current_path, "info.txt"), "w") as f:
             f.write(info_txt)
 
     model = spm.SentencePieceProcessor().Load(
         os.path.join(
-            temp_path,
+            current_path,
             "{}_{}.model".format(
                 config["tokenizers"]["sentencepiece"]["version"],
                 config["tokenizers"]["sentencepiece"]["num_workers"]
             )
         )
     )
+
     return model
