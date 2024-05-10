@@ -1,5 +1,6 @@
 import os
 import csv
+import string
 import traceback
 
 
@@ -21,3 +22,9 @@ def csv_to_txt(input_file, output_file):
 
             for entry in input_csv_reader:
                 output_file.write("{}\n".format(" ".join(entry)))
+
+
+def append_vocab(output_file):
+    with open(output_file, "a") as output_file:
+        for ascii_symbol in string.printable:
+            output_file.write("{}\n".format(ascii_symbol))
