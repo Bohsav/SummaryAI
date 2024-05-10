@@ -16,11 +16,13 @@
     "tokenizers": {
         "sentencepiece": {
             "model_name": "spm_m",
-            "version": "1_1",
+            "version": "1_0",
             "vocab_size": 32000,
             "force_train": true,
             "num_workers": 10,
-            "input_file": "temp/gigaword.txt"
+            "input_file": "temp/gigaword.txt",
+            "input_sentence_size": 50000,
+            "shuffle_input_sentence": true
         }
     },
     "models": {
