@@ -1,6 +1,7 @@
 from typing import Optional
 import torch
 from torch import nn
+from torch.utils.data import DataLoader
 import math
 
 
@@ -134,3 +135,30 @@ class BaseTransformerModel(nn.Module):
         elif (src is None) and (tgt is not None) and (memory is not None):
             return self.decode(tgt, memory, tgt_attn_mask, memory_attn_mask, tgt_padding_mask, memory_padding_mask,
                                is_tgt_attn_mask_causal, is_memory_attn_mask_causal)
+
+    def test_step(self,
+                  embedder_layer: nn.Module,
+                  classification_layer: nn.Module,
+                  loss_func: nn.Module,
+                  test_dataloader: DataLoader
+                  ):
+
+        pass
+
+    def train_step(self,
+                   embedder_layer: nn.Module,
+                   classification_layer: nn.Module,
+                   optimizer: torch.optim.Optimizer,
+                   loss_func: nn.Module,
+                   train_dataloader: DataLoader
+                   ):
+
+        pass
+
+    def validation_step(self,
+                        embedder_layer: nn.Module,
+                        classification_layer: nn.Module,
+                        loss_func: nn.Module,
+                        validation_dataloader: DataLoader
+                        ):
+        pass

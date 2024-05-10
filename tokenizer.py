@@ -27,16 +27,21 @@ def get_sentencepiece_model():
     training_file = config["tokenizers"]["sentencepiece"]["input_file"]
 
     if config["tokenizers"]["sentencepiece"]["force_train"]:
-        inquiry = "--input={} --model_prefix={}".format(
+        inquiry = "--input={} --model_prefix={} --vocab_size={} --num_threads={} --input_sentence_size={} --shuffle_input_sentence={}".format(
             training_file,
 
             "{}/{}_{}".format(current_path,
                               config["tokenizers"]["sentencepiece"]["model_name"],
                               config["tokenizers"]["sentencepiece"]["version"]),
+
+            config["tokenizers"]["sentencepiece"]["vocab_size"],
+            config["tokenizers"]["sentencepiece"]["num_threads"],
+            config["tokenizers"]["sentencepiece"]["input_sentence_size"],
+            config["tokenizers"]["sentencepiece"]["shuffle_input_sentence"]
         )
 
         info_txt = "Log:\nTrained on: {}\n".format(training_file)
-        spm.SentencePieceTrainer.Train(inquiry, kwargs=config["tokenizers"]["sentencepiece"])
+        spm.SentencePieceTrainer.Train(inquiry)
         with open(os.path.join(current_path, "info.txt"), "w") as f:
             f.write(info_txt)
 
