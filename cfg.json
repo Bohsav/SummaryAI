@@ -7,7 +7,7 @@
         "gigaword": {
             "name": "gigaword",
             "force_download": false,
-            "num_workers": 0,
+            "num_workers": 4,
             "trust_remote_code": false,
             "stream": false
         }
@@ -16,10 +16,10 @@
     "tokenizers": {
         "sentencepiece": {
             "model_name": "spm_m",
-            "version": "1_0",
-            "vocab_size": 16000,
+            "version": "1_1",
+            "vocab_size": 32000,
             "force_train": true,
-            "num_workers": 4,
+            "num_workers": 10,
             "input_file": "temp/gigaword.txt"
         }
     },

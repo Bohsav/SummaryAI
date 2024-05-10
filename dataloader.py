@@ -22,7 +22,7 @@ def load_gigaword():
             cfg_file["datasets"]["gigaword"]["force_download"] else DownloadMode.REUSE_DATASET_IF_EXISTS
 
         num_proc = None if cfg_file["datasets"]["gigaword"]["num_workers"] == 0 \
-            else cfg_file["datasets"]["gigaword"]["nuw_workers"]
+            else cfg_file["datasets"]["gigaword"]["num_workers"]
 
         dataset = load_dataset(path=cfg_file["datasets"]["gigaword"]["name"],
                                download_mode=download_mode,
