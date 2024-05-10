@@ -17,10 +17,10 @@
         "sentencepiece": {
             "model_name": "spm_m",
             "version": "1_0",
-            "vocab_size": 8000,
-            "force_train": false,
-            "num_workers": 16,
-            "input_file": ""
+            "vocab_size": 16000,
+            "force_train": true,
+            "num_workers": 4,
+            "input_file": "temp/gigaword.txt"
         }
     },
     "models": {

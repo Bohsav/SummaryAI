@@ -9,7 +9,9 @@ def save_loaded_dataset(loaded_dataset_name: str, cached_dataset):
         cfg_file = json.load(f)
         for split in cached_dataset.keys():
             cached_dataset[split].to_csv(
-                os.path.join(cfg_file["datasets_directory"], cfg_file["datasets"][loaded_dataset_name]["name"], f"{split}")
+                os.path.join(cfg_file["datasets_directory"],
+                             cfg_file["datasets"][loaded_dataset_name]["name"],
+                             f"{split}.csv")
             )
 
 
