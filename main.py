@@ -21,7 +21,7 @@ def custom_collate_fn(batch):
 
     doc_tensors = pad_sequence(doc_tensors)
     summary_tensors = pad_sequence(summary_tensors)
-    return doc_tensors, summary_tensors
+    return doc_tensors, summary_tensors, doc_tensors == 0, summary_tensors == 0
 
 
 class CustomDataset(data.Dataset):
