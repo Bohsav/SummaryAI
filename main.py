@@ -166,7 +166,7 @@ class CustomDataset(data.Dataset):
             self.transformations.append(lambda x: x.append(eos_token))
 
         self.ds = hf_dataset
-        self.transformations = [tokenizer_func, pad_sos_token, pad_eos_token]
+        self.transformations = [tokenizer_func]
 
     def __getitem__(self, idx):
         doc, summary = list(self.ds[idx].values())
@@ -190,6 +190,13 @@ if __name__ == "__main__":
         model_dim = 512
         max_len = 1000
         learning_rate = 1e-4
+        if cfg["device"] == "best":
+            if torch.cuda.is_available():
+                use_device = "cuda"
+            else:
+                use_device = "cpu"
+        else:
+            use_device = cfg["device"]
 
     tokenizer = custom_tokenizer.get_sentencepiece_model()
 
@@ -202,7 +209,7 @@ if __name__ == "__main__":
 
     transformer = custom_model.BaseTransformerModel(batch_first=False)
 
-    full_model_stack = nn.Sequential(embedder, transformer, classification_head)
+    full_model_stack = nn.Sequential(embedder, transformer, classification_head).to(device=use_device)
 
     train_ds = CustomDataset(custom_dataloader.load_gigaword()["train"],
                              tokenizer.Encode,
@@ -218,7 +225,7 @@ if __name__ == "__main__":
                                        drop_last=True
                                        )
 
-    loss_fn = nn.CrossEntropyLoss(ignore_index=PAD_token)
+    loss_fn = nn.CrossEntropyLoss(ignore_index=PAD_token).to(device=use_device)
 
     optimizer_fn = torch.optim.SparseAdam(full_model_stack.parameters(), lr=learning_rate)
     train_loop(classification_head, embedder, transformer, loss_fn, optimizer_fn, train_dataloader, len(train_ds))
