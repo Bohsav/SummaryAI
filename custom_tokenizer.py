@@ -27,16 +27,16 @@ def get_sentencepiece_model():
     training_file = config["tokenizers"]["sentencepiece"]["input_file"]
 
     if config["tokenizers"]["sentencepiece"]["force_train"]:
-        inquiry = ("--input={}"
-                   "--model_prefix={}"
-                   "--vocab_size={}"
-                   "--num_threads={}"
-                   "--input_sentence_size={}"
-                   "--shuffle_input_sentence={}"
-                   "--unk_id={}"
-                   "--bos_id={}"
-                   "--eos_id={}"
-                   "--pad_id={}").format(
+        inquiry = (" --input={}"
+                   " --model_prefix={} "
+                   " --vocab_size={}"
+                   " --num_threads={}"
+                   " --input_sentence_size={}"
+                   " --shuffle_input_sentence={}"
+                   " --unk_id={}"
+                   " --bos_id={}"
+                   " --eos_id={}"
+                   " --pad_id={}").format(
             training_file,
 
             "{}/{}_{}".format(current_path,
