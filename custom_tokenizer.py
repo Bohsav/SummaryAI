@@ -1,7 +1,7 @@
 import sentencepiece as spm
 import json
 import os
-from utils import generate_directories
+from my_utils import generate_directories
 
 
 def get_sentencepiece_model():

@@ -1,12 +1,11 @@
 from typing import Optional
-
+import json
 import torch
-from torch import Tensor
+from torch import nn
 from torch.utils import data
 import datasets
-from tqdm import tqdm
-import dataloader
-import model
+import custom_dataloader
+import custom_model
 from torch.nn.utils.rnn import pad_sequence
 import tensorboard
 import datetime
@@ -17,15 +16,15 @@ import datetime
 
 def train_loop(
         classification_head: torch.nn.Module,
-        embedder: model.TransformerEmbedding,
-        transformer: model.BaseTransformerModel,
+        embedder: custom_model.TransformerEmbedding,
+        transformer: custom_model.BaseTransformerModel,
         loss_fn: torch.nn.CrossEntropyLoss,
         optim: torch.optim.Optimizer,
-        train_dataloader: torch.utils.data.DataLoader,
+        training_dataloader: data.DataLoader,
         dataset_length: int
 ):
-    batch_size = train_dataloader.batch_size
-    for batch_idx, (doc_batch, summary_batch, doc_pad_mask, summary_pad_batch) in enumerate(train_dataloader):
+    batch_size = training_dataloader.batch_size
+    for batch_idx, (doc_batch, summary_batch, doc_pad_mask, summary_pad_batch) in enumerate(training_dataloader):
         print(">Status:")
         print(">Current time = {}".format(datetime.datetime.now()))
         print(">Batch idx = {}".format(batch_idx))
@@ -121,13 +120,13 @@ def test_loop(transformer: torch.nn.Module,
               loss_fn,
               test_dataloader: torch.utils.data.DataLoader
               ):
-    pass
+    raise NotImplementedError("")
 
 
 def validation_loop(transformer: torch.nn.Module,
                     val_dataloader: torch.utils.data.DataLoader
                     ):
-    pass
+    raise NotImplementedError("")
 
 
 def custom_collate_fn(batch):
@@ -151,14 +150,14 @@ def custom_collate_fn(batch):
 class CustomDataset(data.Dataset):
     def __init__(self,
                  hf_dataset: datasets.Dataset,
-                 tokenizer,
+                 tokenizer_func,
                  pad_sos_token: Optional[bool] = True,
                  pad_eos_token: Optional[bool] = True,
                  sos_token: Optional[int] = 1,
                  eos_token: Optional[int] = 2
                  ):
         self.transformations = []
-        self.transformations.append(tokenizer)
+        self.transformations.append(tokenizer_func)
         if pad_sos_token:
             self.transformations.append(lambda x: x.insert(0, sos_token))
         if pad_eos_token:
@@ -179,4 +178,44 @@ class CustomDataset(data.Dataset):
 
 
 if __name__ == "__main__":
-    print("Hi")
+    with open("cfg.json", "r") as f:
+        cfg = json.load(f)
+        PAD_token = cfg["PAD token"]
+        SOS_token = cfg["SOS token"]
+        EOS_token = cfg["EOS token"]
+        UNK_token = cfg["UNK token"]
+        vocab_size = 32000
+        model_dim = 512
+        max_len = 1000
+        learning_rate = 1e-4
+
+    tokenizer = lambda x: x
+
+    embedder = custom_model.TransformerEmbedding(vocab_size=vocab_size,
+                                                 model_dim=model_dim,
+                                                 max_len=max_len,
+                                                 padding_idx=PAD_token,
+                                                 )
+    classification_head = nn.Linear(model_dim, vocab_size)
+
+    transformer = custom_model.BaseTransformerModel(batch_first=False)
+
+    full_model_stack = nn.Sequential(embedder, transformer, classification_head)
+
+    train_ds = CustomDataset(custom_dataloader.load_gigaword(),
+                             tokenizer,
+                             True,
+                             True,
+                             sos_token=SOS_token,
+                             eos_token=EOS_token
+                             )
+    train_dataloader = data.DataLoader(train_ds,
+                                       batch_size=32,
+                                       shuffle=True,
+                                       collate_fn=custom_collate_fn,
+                                       drop_last=True
+                                       )
+
+    loss_fn = nn.CrossEntropyLoss(ignore_index=PAD_token)
+
+    optimizer_fn = torch.optim.SparseAdam(full_model_stack.parameters(), lr=learning_rate)
