@@ -10,7 +10,7 @@
     "datasets": {
         "gigaword": {
             "name": "gigaword",
-            "force_download": true,
+            "force_download": false,
             "num_workers": 4,
             "trust_remote_code": false,
             "stream": false
@@ -22,7 +22,7 @@
             "model_name": "spm_m",
             "version": "1_0",
             "vocab_size": 32000,
-            "force_train": true,
+            "force_train": false,
             "num_threads": 12,
             "input_file": "temp/gigaword.txt",
             "input_sentence_size": 0,
