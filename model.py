@@ -42,10 +42,11 @@ class TransformerEmbedding(nn.Module):
                  vocab_size: int,
                  model_dim: int,
                  max_len: int,
+                 padding_idx: int,
                  learnable_pos_embeddings: Optional[bool] = False,
                  dropout_prob: Optional[float] = 0.1):
         super(TransformerEmbedding, self).__init__()
-        self.token_embed = nn.Embedding(vocab_size, model_dim)
+        self.token_embed = nn.Embedding(vocab_size, model_dim, padding_idx=padding_idx)
         if learnable_pos_embeddings:
             self.pos_embed = LearnablePositionalEncoding(model_dim, max_len)
         else:
