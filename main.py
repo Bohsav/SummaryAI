@@ -166,7 +166,7 @@ class CustomDataset(data.Dataset):
             self.transformations.append(lambda x: x.append(eos_token))
 
         self.ds = hf_dataset
-        self.transformations = [tokenizer, pad_sos_token, pad_eos_token]
+        self.transformations = [tokenizer_func, pad_sos_token, pad_eos_token]
 
     def __getitem__(self, idx):
         doc, summary = list(self.ds[idx].values())
