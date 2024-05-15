@@ -1,0 +1,2 @@
+Log:
+Trained on: temp/gigaword.txt
