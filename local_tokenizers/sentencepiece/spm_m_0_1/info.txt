@@ -1,0 +1,2 @@
+Log:
+Trained on: local_datasets/gigaword/test.csv
