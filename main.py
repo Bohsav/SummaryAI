@@ -10,6 +10,8 @@ from torch.nn.utils.rnn import pad_sequence
 import tensorboard
 import datetime
 
+import custom_tokenizer
+
 
 # Main routine -> add tensorboard
 
@@ -189,7 +191,7 @@ if __name__ == "__main__":
         max_len = 1000
         learning_rate = 1e-4
 
-    tokenizer = lambda x: x
+    tokenizer = custom_tokenizer.get_sentencepiece_model()
 
     embedder = custom_model.TransformerEmbedding(vocab_size=vocab_size,
                                                  model_dim=model_dim,
@@ -202,7 +204,7 @@ if __name__ == "__main__":
 
     full_model_stack = nn.Sequential(embedder, transformer, classification_head)
 
-    train_ds = CustomDataset(custom_dataloader.load_gigaword(),
+    train_ds = CustomDataset(custom_dataloader.load_gigaword()["train"],
                              tokenizer,
                              True,
                              True,
@@ -219,3 +221,4 @@ if __name__ == "__main__":
     loss_fn = nn.CrossEntropyLoss(ignore_index=PAD_token)
 
     optimizer_fn = torch.optim.SparseAdam(full_model_stack.parameters(), lr=learning_rate)
+    train_loop(classification_head, embedder, transformer, loss_fn, optimizer_fn, train_dataloader, len(train_ds))
