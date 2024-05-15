@@ -205,7 +205,7 @@ if __name__ == "__main__":
     full_model_stack = nn.Sequential(embedder, transformer, classification_head)
 
     train_ds = CustomDataset(custom_dataloader.load_gigaword()["train"],
-                             tokenizer,
+                             tokenizer.Encode,
                              True,
                              True,
                              sos_token=SOS_token,
