@@ -29,16 +29,16 @@ def train_loop(
         print(">Status:")
         print(">Current time = {}".format(datetime.datetime.now()))
         print(">Batch idx = {}".format(batch_idx))
-        print(">Number of arguments processed = {}".format(batch_idx * batch_size))
-        print(">Progress = {.2f}%".format((batch_idx * batch_size) / dataset_length))
-        print(">{}: Encoding...".format(datetime.datetime.now()))
+        print(">Number of values processed = {}".format(batch_idx * batch_size))
+        print(">Progress = {.2f}%".format(100*(batch_idx * batch_size) / dataset_length))
+        print(">Encoding...")
 
         # Shape: S, N
         doc_batch = doc_batch.to(transformer.device)
         # Shape: T, N
         summary_batch = summary_batch.to(transformer.device)
 
-        # TODO: Fix this wasted memory somehow
+        # According to pytorch documentation slicing does not return an immediate copy
         # Input_summary_batch includes the sos token but does not include the eos token.
         # This is used to provide inputs for the decoder model to secure teaching enforcement.
         input_summary_batch = summary_batch[:-1, :]
@@ -46,6 +46,8 @@ def train_loop(
         # This is used as the target in loss function calculation.
         target_summary_batch = summary_batch[1:, :]
         # Both of them have the exact same shape
+        # WARNING: Since these could be views of each other,
+        #   they have to be copied for operations
 
         # Shape: N, S
         doc_pad_mask = doc_pad_mask.to(device=transformer.device, dtype=torch.bool)
@@ -72,18 +74,26 @@ def train_loop(
         memory_batch = transformer.encode(doc_batch, src_padding_mask=doc_pad_mask)
 
         total_mask = None
+        print(">{}: Decoding...".format(datetime.datetime.now()))
+        loss_vals = []
         for i in range(input_summary_batch.shape[0]):
             future_mask[:, i] = False
             total_mask = summary_pad_batch.bitwise_or(future_mask)
+            # masked_input_summary_batch = torch.where(total_mask.transpose(0, 1),
+            #                                          embedder.token_embed.padding_idx,
+            #                                          input_summary_batch
+            #                                          )
+            # masked_target_summary_batch = torch.where(total_mask.transpose(0, 1),
+            #                                           embedder.token_embed.padding_idx,
+            #                                           target_summary_batch
+            #                                           )
+            masked_input_summary_batch = input_summary_batch.bitwise_and(
+                total_mask.int().bitwise_not().transpose(0, 1)
+            )
+            masked_target_summary_batch = target_summary_batch.bitwise_and(
+                total_mask.int().bitwise_not().transpose(0, 1)
+            )
 
-            masked_input_summary_batch = torch.where(total_mask.transpose(0, 1),
-                                                     embedder.token_embed.padding_idx,
-                                                     input_summary_batch
-                                                     )
-            masked_target_summary_batch = torch.where(total_mask.transpose(0, 1),
-                                                      embedder.token_embed.padding_idx,
-                                                      target_summary_batch
-                                                      )
             embedded_summary = embedder(masked_input_summary_batch)
             decoded_features = transformer.decode(tgt=embedded_summary,
                                                   memory=memory_batch,
@@ -100,18 +110,11 @@ def train_loop(
                 prediction.view(-1, prediction.shape[-1]).contiguous(),
                 masked_target_summary_batch.view(-1).contiguous()
             )
+            loss_vals.append(loss_val.item())
             loss_val.backward()
             optim.step()
             optim.zero_grad()
-
-
-"""
-[1, 0, 0, 0, 0]
-[1, 2, 0, 0, 0]
-[1, 2, 3, 0, 0]
-[1, 2, 3, 4, 0]
-[1, 2, 3, 4, 5]
-"""
+        print(">{}: Finished Decoding. Average decoding loss: {}".format(datetime.datetime.now(), sum(loss_vals)/len(loss_vals)))
 
 
 def test_loop(transformer: torch.nn.Module,
