@@ -1,10 +1,10 @@
-from typing import Optional
+from typing import Optional, Union
 import torch
 from torch import nn
 import math
 
 
-def generate_decoder_mask(size: int, device: str) -> torch.Tensor:
+def generate_decoder_mask(size: int, device: Union[str, torch.device]) -> torch.Tensor:
     return torch.triu(torch.ones(size, size) * float('-inf'), diagonal=1).to(device)
 
 
@@ -41,10 +41,11 @@ class TransformerEmbedding(nn.Module):
                  vocab_size: int,
                  model_dim: int,
                  max_len: int,
+                 padding_idx: int,
                  learnable_pos_embeddings: Optional[bool] = False,
                  dropout_prob: Optional[float] = 0.1):
         super(TransformerEmbedding, self).__init__()
-        self.token_embed = nn.Embedding(vocab_size, model_dim)
+        self.token_embed = nn.Embedding(vocab_size, model_dim, padding_idx=padding_idx)
         if learnable_pos_embeddings:
             self.pos_embed = LearnablePositionalEncoding(model_dim, max_len)
         else:
@@ -112,12 +113,11 @@ class BaseTransformerModel(nn.Module):
                                      memory_padding_mask,
                                      is_tgt_attn_mask_causal,
                                      is_memory_attn_mask_causal)
-
         return decoder_output
 
     def forward(self,
+                tgt: torch.Tensor,
                 src: Optional[torch.Tensor] = None,
-                tgt: Optional[torch.Tensor] = None,
                 memory: Optional[torch.Tensor] = None,
                 src_attn_mask: Optional[torch.Tensor] = None,
                 src_padding_mask: Optional[torch.Tensor] = None,
@@ -129,8 +129,11 @@ class BaseTransformerModel(nn.Module):
                 tgt_padding_mask: Optional[torch.Tensor] = None,
                 is_tgt_attn_mask_causal: Optional[bool] = False
                 ) -> torch.Tensor:
-        if (src is not None) and (tgt is None) and (memory is None):
-            return self.encode(src, src_attn_mask, src_padding_mask, is_src_attn_mask_causal)
-        elif (src is None) and (tgt is not None) and (memory is not None):
-            return self.decode(tgt, memory, tgt_attn_mask, memory_attn_mask, tgt_padding_mask, memory_padding_mask,
-                               is_tgt_attn_mask_causal, is_memory_attn_mask_causal)
+        s_dim, b_dim, f_dim = tgt.shape
+        memory = self.encode(src, src_attn_mask, src_padding_mask, is_src_attn_mask_causal) \
+            if memory is None else memory
+
+        tgt_attn_mask = generate_decoder_mask(s_dim, tgt.device) if tgt_attn_mask is None else tgt_attn_mask
+
+        return self.decode(tgt, memory, tgt_attn_mask, memory_attn_mask, tgt_padding_mask, memory_padding_mask,
+                           is_tgt_attn_mask_causal, is_memory_attn_mask_causal)

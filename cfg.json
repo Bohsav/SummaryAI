@@ -1,15 +1,40 @@
 {
+    "PAD token": 0,
+    "SOS token": 1,
+    "EOS token": 2,
+    "UNK token": 3,
     "datasets_directory": "local_datasets",
     "dataloader_validate": ["gigaword"],
     "dataloader_create_csv": true,
+    "device": "best",
     "datasets": {
         "gigaword": {
             "name": "gigaword",
             "force_download": false,
-            "num_workers": 0,
+            "num_workers": 4,
             "trust_remote_code": false,
             "stream": false
         }
     },
-    "device": "best"
+    "tokenizers_directory": "local_tokenizers",
+    "tokenizers": {
+        "sentencepiece": {
+            "model_name": "spm_m",
+            "version": "1_0",
+            "vocab_size": 32000,
+            "force_train": true,
+            "num_threads": 8,
+            "input_file": "temp/gigaword.txt",
+            "input_sentence_size": 0,
+            "shuffle_input_sentence": true
+        }
+    },
+    "models": {
+        "transformer": {
+            "model_dim": 512,
+            "inner_ff_dim": 2048,
+            "n_encoders": 6,
+            "n_decoders": 6
+        }
+    }
 }
