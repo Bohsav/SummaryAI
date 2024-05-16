@@ -37,14 +37,13 @@ def train_loop(
 
         # Shape: S, N
         doc_batch = doc_batch.to(all_device)
-        print("Doc_batch shape:\n{}".format(doc_batch.shape))
         # Shape: T, N
         summary_batch = summary_batch.to(all_device)
-        print("summary_batch shape:\n{}".format(summary_batch.shape))
-        # According to pytorch documentation slicing does not return an immediate copy
         # Input_summary_batch includes the sos token but does not include the eos token.
-        # This is used to provide inputs for the decoder model to secure teaching enforcement.
-        input_summary_batch = summary_batch[:-1, :]
+        # This is provided as the input to the decoder
+        input_summary_batch = summary_batch * torch.roll(summary_pad_batch.transpose(0, 1).bool().bitwise_not().int(),
+                                                         -summary_batch.shape[1])
+        input_summary_batch = input_summary_batch[:-1, :]
         print("input_summary_batch shape:\n{}".format(input_summary_batch.shape))
         # Target_summary_batch includes the eos token but does not include the sos token.
         # This is used as the target in loss function calculation.
@@ -125,7 +124,7 @@ def train_loop(
                                                   )
             print("decoded features shape:{}\ndecoded features:\n{}".format(decoded_features.shape, decoded_features))
             prediction = classification_head(decoded_features)
-            print("prediction shape:{}\nprediction:\n{}".forma t(prediction.shape, prediction))
+            print("prediction shape:{}\nprediction:\n{}".format(prediction.shape, prediction))
 
             loss_val = loss_fn(
                 prediction.view(-1, prediction.shape[-1]).contiguous(),
