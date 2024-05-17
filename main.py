@@ -28,6 +28,7 @@ def train_loop(
 ):
     batch_size = training_dataloader.batch_size
     for batch_idx, (doc_batch, summary_batch, doc_pad_mask, summary_pad_batch) in enumerate(training_dataloader):
+        optim.zero_grad()
         print(">Status:")
         print(">Current time = {}".format(datetime.datetime.now()))
         print(">Batch idx = {}".format(batch_idx))
@@ -44,29 +45,24 @@ def train_loop(
         input_summary_batch = summary_batch * torch.roll(summary_pad_batch.transpose(0, 1).bool().bitwise_not().int(),
                                                          -summary_batch.shape[1])
         input_summary_batch = input_summary_batch[:-1, :]
-        print("input_summary_batch shape:\n{}".format(input_summary_batch.shape))
         # Target_summary_batch includes the eos token but does not include the sos token.
         # This is used as the target in loss function calculation.
         target_summary_batch = summary_batch[1:, :]
-        print("target_summary_batch:\n{}".format(target_summary_batch.shape))
         # Both of them have the exact same shape
         # WARNING: Since these could be views of each other,
         #   they have to be copied for operations
 
         # Shape: N, S
         doc_pad_mask = doc_pad_mask.to(device=all_device, dtype=torch.bool)
-        print("doc_pad_mask shape:\n{}".format(doc_pad_mask.shape))
         # Shape: N, T
         # Excludes the eos token to align with the future mask
         summary_pad_batch = summary_pad_batch.to(device=all_device, dtype=torch.bool)[:, 1:]
-        print("summary_pad_batch shape:\n{}".format(doc_pad_mask.shape))
         # The triangular attention mask
         # Shape: T, T
         attn_mask = torch.triu(
             input=torch.ones(input_summary_batch.shape[0], input_summary_batch.shape[0]),
             diagonal=1
         ).to(device=input_summary_batch.device, dtype=torch.bool)
-        print("attn_mask shape:\n{}".format(attn_mask.shape))
         # This mask is used to cover the future values, and uncover the current values.
         # Shape: N, T
         future_mask = torch.ones(
@@ -74,25 +70,17 @@ def train_loop(
             device=summary_pad_batch.device,
             dtype=torch.bool
         )
-        print("Initial future mask shape:\n{}".format(future_mask.shape))
-        # doc_batch = embedder(doc_batch)
-        # memory_batch = transformer.encode(doc_batch, src_padding_mask=doc_pad_mask)
+        doc_batch = embedder(doc_batch)
+        memory_batch = transformer.encode(doc_batch, src_padding_mask=doc_pad_mask)
 
         total_mask = None
         print(">{}: Decoding...".format(datetime.datetime.now()))
         loss_vals = []
+        sequence_loss = torch.tensor(0., device=input_summary_batch.device)
         for i in range(input_summary_batch.shape[0]):
-            print("Doc batch:\n{}".format(doc_batch))
-            print("Doc pad mask:\n{}".format(doc_pad_mask))
-            embedded_doc_batch = embedder(doc_batch)
-            print("embedded doc_batch shape:\n{}".format(embedded_doc_batch.shape))
-            print("embedded doc_batch:\n{}".format(embedded_doc_batch))
-            memory_batch = transformer.encode(embedded_doc_batch, src_padding_mask=doc_pad_mask)
-            print("memory shape:{}\nmemory:\n{}".format(memory_batch.shape, memory_batch))
             future_mask[:, i] = False
-            print("Future mask:\n{}".format(future_mask))
+            # print("Future mask:\n{}".format(future_mask))
             total_mask = summary_pad_batch.bitwise_or(future_mask)
-            print("Total mask shape: {}\nTotal mask:\n{}.".format(total_mask.shape, total_mask))
             # masked_input_summary_batch = torch.where(total_mask.transpose(0, 1),
             #                                          embedder.token_embed.padding_idx,
             #                                          input_summary_batch
@@ -101,18 +89,10 @@ def train_loop(
             #                                           embedder.token_embed.padding_idx,
             #                                           target_summary_batch
             #                                           )
-            print("Input_summary_batch shape: {}\nInput summary:\n{}".format(input_summary_batch.shape, input_summary_batch))
-            masked_input_summary_batch = input_summary_batch.bitwise_and(
-                total_mask.int().bitwise_not().transpose(0, 1)
-            )
-            print("Masked input summary batch shape: {}\n Masked input summary:\n{}".format(masked_input_summary_batch.shape, masked_input_summary_batch))
-            masked_target_summary_batch = target_summary_batch.bitwise_and(
-                total_mask.int().bitwise_not().transpose(0, 1)
-            )
-            print("Masked target summary batch shape: {}\n masked target summary:\n{}".format(masked_target_summary_batch.shape, masked_target_summary_batch))
+            masked_input_summary_batch = input_summary_batch.mul(total_mask.bitwise_not().int().transpose(0, 1))
+            masked_target_summary_batch = target_summary_batch.mul(total_mask.bitwise_not().int().transpose(0, 1))
 
             embedded_summary = embedder(masked_input_summary_batch)
-            print("embedded summary shape: {}\nEmbedded summary:\n{}".format(embedded_summary.shape, embedded_summary))
             decoded_features = transformer.decode(tgt=embedded_summary,
                                                   memory=memory_batch,
                                                   tgt_attn_mask=attn_mask,
@@ -122,23 +102,27 @@ def train_loop(
                                                   is_tgt_attn_mask_causal=False,
                                                   is_memory_attn_mask_causal=False
                                                   )
-            print("decoded features shape:{}\ndecoded features:\n{}".format(decoded_features.shape, decoded_features))
             prediction = classification_head(decoded_features)
-            print("prediction shape:{}\nprediction:\n{}".format(prediction.shape, prediction))
+
+            prediction = prediction * total_mask.bitwise_not().int().transpose(0, 1).unsqueeze(-1)
 
             loss_val = loss_fn(
                 prediction.view(-1, prediction.shape[-1]).contiguous(),
                 masked_target_summary_batch.view(-1).contiguous()
             )
+
+            sequence_loss += loss_val
+
             print("{}th loss value = {}".format(i, loss_val.item()))
             loss_vals.append(loss_val.item())
-            loss_val.backward()
-            optim.step()
-            optim.zero_grad()
-            break
         print(">{}: Finished Decoding. Average decoding loss: {}".format(datetime.datetime.now(),
                                                                          sum(loss_vals)/len(loss_vals)))
-        break
+        print(">Total loss: {}".format(sequence_loss))
+        sequence_loss.backward()
+
+        nn.utils.clip_grad_norm_(full_model_stack.parameters(), 1.0)
+
+        optim.step()
 
 
 def test_loop(transformer: torch.nn.Module,
