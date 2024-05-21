@@ -6,7 +6,8 @@
     "datasets_directory": "local_datasets",
     "dataloader_validate": ["gigaword"],
     "dataloader_create_csv": true,
-    "device": "cpu",
+    "batch_size": 256,
+    "device": "best",
     "datasets": {
         "gigaword": {
             "name": "gigaword",

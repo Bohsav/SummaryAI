@@ -43,6 +43,9 @@ def train_loop(
         summary_batch = summary_batch.to(all_device)
         # Input_summary_batch includes the sos token but does not include the eos token.
         # This is provided as the input to the decoder
+        summary_pad_batch = summary_pad_batch.to(device=all_device, dtype=torch.bool)
+        doc_pad_mask = doc_pad_mask.to(device=all_device, dtype=torch.bool)
+
         input_summary_batch = summary_batch * torch.roll(summary_pad_batch.transpose(0, 1).bool().bitwise_not().int(),
                                                          -summary_batch.shape[1])
         input_summary_batch = input_summary_batch[:-1, :]
@@ -53,77 +56,44 @@ def train_loop(
         # WARNING: Since these could be views of each other,
         #   they have to be copied for operations
 
-        # Shape: N, S
-        doc_pad_mask = doc_pad_mask.to(device=all_device, dtype=torch.bool)
-        # Shape: N, T
         # Excludes the eos token to align with the future mask
-        summary_pad_batch = summary_pad_batch.to(device=all_device, dtype=torch.bool)[:, 1:]
+        summary_pad_batch = summary_pad_batch[:, 1:]
         # The triangular attention mask
         # Shape: T, T
         attn_mask = torch.triu(
             input=torch.ones(input_summary_batch.shape[0], input_summary_batch.shape[0]),
             diagonal=1
         ).to(device=input_summary_batch.device, dtype=torch.bool)
-        # This mask is used to cover the future values, and uncover the current values.
-        # Shape: N, T
-        future_mask = torch.ones(
-            summary_pad_batch.shape,
-            device=summary_pad_batch.device,
-            dtype=torch.bool
-        )
+
         doc_batch = embedder(doc_batch)
         memory_batch = transformer.encode(doc_batch, src_padding_mask=doc_pad_mask)
 
-        total_mask = None
         print(">{}: Decoding...".format(datetime.datetime.now()))
-        loss_vals = []
-        sequence_loss = torch.tensor(0., device=input_summary_batch.device)
-        for i in range(input_summary_batch.shape[0]):
-            future_mask[:, i] = False
-            # print("Future mask:\n{}".format(future_mask))
-            total_mask = summary_pad_batch.bitwise_or(future_mask)
-            # masked_input_summary_batch = torch.where(total_mask.transpose(0, 1),
-            #                                          embedder.token_embed.padding_idx,
-            #                                          input_summary_batch
-            #                                          )
-            # masked_target_summary_batch = torch.where(total_mask.transpose(0, 1),
-            #                                           embedder.token_embed.padding_idx,
-            #                                           target_summary_batch
-            #                                           )
-            masked_input_summary_batch = input_summary_batch.mul(total_mask.bitwise_not().int().transpose(0, 1))
-            masked_target_summary_batch = target_summary_batch.mul(total_mask.bitwise_not().int().transpose(0, 1))
 
-            embedded_summary = embedder(masked_input_summary_batch)
-            decoded_features = transformer.decode(tgt=embedded_summary,
-                                                  memory=memory_batch,
-                                                  tgt_attn_mask=attn_mask,
-                                                  memory_attn_mask=None,
-                                                  tgt_padding_mask=total_mask,
-                                                  memory_padding_mask=doc_pad_mask,
-                                                  is_tgt_attn_mask_causal=False,
-                                                  is_memory_attn_mask_causal=False
-                                                  )
-            prediction = classification_head(decoded_features)
+        embedded_summary = embedder(input_summary_batch)
+        decoded_features = transformer.decode(tgt=embedded_summary,
+                                              memory=memory_batch,
+                                              tgt_attn_mask=attn_mask,
+                                              memory_attn_mask=None,
+                                              tgt_padding_mask=summary_pad_batch,
+                                              memory_padding_mask=doc_pad_mask,
+                                              is_tgt_attn_mask_causal=False,
+                                              is_memory_attn_mask_causal=False
+                                              )
+        prediction = classification_head(decoded_features)
 
-            prediction = prediction * total_mask.bitwise_not().int().transpose(0, 1).unsqueeze(-1)
+        loss_val = loss_fn(
+            prediction.view(-1, prediction.shape[-1]).contiguous(),
+            target_summary_batch.view(-1).contiguous()
+        )
 
-            loss_val = loss_fn(
-                prediction.view(-1, prediction.shape[-1]).contiguous(),
-                masked_target_summary_batch.view(-1).contiguous()
-            )
-
-            sequence_loss += loss_val
-
-            print("{}th loss value = {}".format(i, loss_val.item()))
-            loss_vals.append(loss_val.item())
-        print(">{}: Finished Decoding. Average decoding loss: {}".format(datetime.datetime.now(),
-                                                                         sum(loss_vals)/len(loss_vals)))
-        print(">Total loss: {}".format(sequence_loss))
-        sequence_loss.backward()
+        print(">loss val: {}".format(loss_val.item()))
+        loss_val.backward()
 
         nn.utils.clip_grad_norm_(full_model_dict.parameters(), 1.0)
 
         optim.step()
+
 
 
 def test_loop(model_dict: torch.nn.ModuleDict,
@@ -310,6 +280,7 @@ if __name__ == "__main__":
         SOS_token = cfg["SOS token"]
         EOS_token = cfg["EOS token"]
         UNK_token = cfg["UNK token"]
+        batch_size = cfg["batch_size"]
         vocab_size = 32000
         model_dim = 512
         max_len = 1000
@@ -351,7 +322,7 @@ if __name__ == "__main__":
                              eos_token=EOS_token
                              )
     train_dataloader = data.DataLoader(train_ds,
-                                       batch_size=32,
+                                       batch_size=batch_size,
                                        shuffle=True,
                                        collate_fn=custom_collate_fn,
                                        drop_last=True
@@ -370,8 +341,4 @@ if __name__ == "__main__":
             train_dataloader,
             len(train_ds),
             use_device
-        )
-        print(">Testing...")
-        test_loop(
-
         )
