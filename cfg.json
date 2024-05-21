@@ -36,5 +36,6 @@
             "n_encoders": 6,
             "n_decoders": 6
         }
-    }
+    },
+    "epochs": 3
 }

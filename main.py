@@ -17,15 +17,16 @@ import custom_tokenizer
 
 
 def train_loop(
-        classification_head: torch.nn.Module,
-        embedder: custom_model.TransformerEmbedding,
-        transformer: custom_model.BaseTransformerModel,
+        model_dict: torch.nn.ModuleDict,
         loss_fn: torch.nn.CrossEntropyLoss,
         optim: torch.optim.Optimizer,
         training_dataloader: data.DataLoader,
         dataset_length: int,
         all_device
 ):
+    classification_head = model_dict["classification_head"]
+    embedder = model_dict["embedder"]
+    transformer = model_dict["transformer"]
     batch_size = training_dataloader.batch_size
     for batch_idx, (doc_batch, summary_batch, doc_pad_mask, summary_pad_batch) in enumerate(training_dataloader):
         optim.zero_grad()
@@ -120,16 +121,123 @@ def train_loop(
         print(">Total loss: {}".format(sequence_loss))
         sequence_loss.backward()
 
-        nn.utils.clip_grad_norm_(full_model_stack.parameters(), 1.0)
+        nn.utils.clip_grad_norm_(full_model_dict.parameters(), 1.0)
 
         optim.step()
 
 
-def test_loop(transformer: torch.nn.Module,
-              loss_fn,
-              test_dataloader: torch.utils.data.DataLoader
+def test_loop(model_dict: torch.nn.ModuleDict,
+              loss_fn: torch.nn.CrossEntropyLoss,
+              test_dataloader: torch.utils.data.DataLoader,
+              dataset_length: int,
+              all_device: torch.device
               ):
-    raise NotImplementedError("")
+    model_dict.eval()
+    with torch.no_grad():
+        transformer = model_dict["transformer"]
+        classification_head = model_dict["classification_head"]
+        embedder = model_dict["embedder"]
+        batch_size = test_dataloader.batch_size
+        for batch_idx, (doc_batch, summary_batch, doc_pad_batch, sum_pad_batch) in enumerate(test_dataloader):
+            print(">Status:")
+            print(">Current time = {}".format(datetime.datetime.now()))
+            print(">Batch idx = {}".format(batch_idx))
+            print(">Number of values processed = {}".format(batch_idx * batch_size))
+            print(">Progress = {:.2f}%".format(100 * (batch_idx * batch_size) / dataset_length))
+            print(">Encoding...")
+
+            # Sd N
+            doc_batch = doc_batch.to(device=all_device)
+            # Ss N
+            summary_batch = summary_batch.to(device=all_device)
+            # N Sd
+            doc_pad_batch = doc_pad_batch.to(device=all_device, dtype=torch.bool)
+            # N Ss
+            sum_pad_batch = sum_pad_batch.to(device=all_device, dtype=torch.bool)
+
+            # No SOS token
+            target_summary_batch = summary_batch[1:, :]
+            # No EOS token
+            input_summary_batch = summary_batch * torch.roll(sum_pad_batch.transpose(0, 1).bitwise_not().int(),
+                                                             -summary_batch.shape[1])
+            input_summary_batch = input_summary_batch[:-1, :]
+
+            sum_pad_batch = sum_pad_batch[:, 1:]
+
+            attn_mask = torch.triu(
+                input=torch.ones(input_summary_batch.shape[0], input_summary_batch.shape[0]),
+                diagonal=1
+            ).to(device=all_device, dtype=torch.bool)
+
+            future_mask = torch.ones(input_summary_batch.shape, device=all_device, dtype=torch.bool)
+
+            memory_batch = transformer.encode(
+                embedder(doc_batch),
+                src_padding_mask=doc_pad_batch
+            )
+
+            total_mask = None
+            loss_vals = []
+            print(">Decoding...")
+            teacher_enforced_loss = torch.tensor(0., device=all_device)
+
+            for i in range(input_summary_batch.shape[0]):
+                future_mask[:, i] = False
+                total_mask = sum_pad_batch.bitwise_or(future_mask)
+
+                masked_input_summary_batch = input_summary_batch.mul(total_mask.bitwise_not().int().transpose(0, 1))
+                masked_target_summary_batch = target_summary_batch.mul(total_mask.bitwise_not().int().tranpose(0, 1))
+
+                embedded_current_summary = embedder(input_summary_batch)
+                embedded_current_summary = transformer.decode(
+                    tgt=embedded_current_summary,
+                    memory=memory_batch,
+                    tgt_attn_mask=attn_mask,
+                    memory_attn_mask=None,
+                    tgt_padding_mask=total_mask,
+                    memory_padding_mask=doc_pad_batch,
+                    is_tgt_attn_mask_causal=False,
+                    is_memory_attn_mask_causal=False
+                )
+
+                prediction = classification_head(embedded_current_summary)
+
+                prediction = prediction * total_mask.bitwise_not().int().transpose(0, 1).unsqueeze(-1)
+
+                loss_val = loss_fn(
+                    prediction.view(-1, prediction.shape[-1]).contiguous(),
+                    masked_target_summary_batch.view(-1).contiguous()
+                )
+
+                teacher_enforced_loss += loss_val
+                print("{}th teacher enforced loss = {}".format(i, loss_val))
+                loss_vals.append(loss_val.item())
+            print("Total teacher enforced loss = {}. Average teacher enforced loss = {} ".format(
+                teacher_enforced_loss,
+                teacher_enforced_loss/len(loss_vals)
+            ))
+
+            full_transformer_output = torch.zeros_like(target_summary_batch)
+            full_transformer_output[0, :] = SOS_token
+            autoregressive_loss = torch.tensor(0.)
+            autoregressive_loss_vals = []
+            future_mask = torch.ones(input_summary_batch.shape, device=all_device, dtype=torch.bool)
+            for i in range(input_summary_batch.shape[0]):
+                future_mask[:, i] = False
+                full_transformer_output = embedder(full_transformer_output)
+                full_transformer_output = transformer.decoder(
+                    tgt=full_transformer_output,
+                    memory=memory_batch,
+                    tgt_attn_mask=attn_mask,
+                    memory_attn_mask=None,
+                    tgt_padding_mask=future_mask,
+                    memory_padding_mask=doc_pad_batch,
+                    is_tgt_attn_mask_causal=False,
+                    is_memory_attn_mask_causal=False
+                )
+
+                prediction = classification_head(full_transformer_output)
+
 
 
 def validation_loop(transformer: torch.nn.Module,
@@ -213,6 +321,7 @@ if __name__ == "__main__":
                 use_device = "cpu"
         else:
             use_device = cfg["device"]
+        epochs = cfg["epochs"]
 
     use_device = torch.device(use_device)
 
@@ -228,7 +337,11 @@ if __name__ == "__main__":
 
     transformer = custom_model.BaseTransformerModel(batch_first=False)
 
-    full_model_stack = nn.ModuleList([embedder, transformer, classification_head]).to(device=use_device)
+    full_model_dict = torch.nn.ModuleDict({
+        "embedder": embedder,
+        "transformer": transformer,
+        "classification_head": classification_head
+    }).to(device=use_device)
 
     train_ds = CustomDataset(custom_dataloader.load_gigaword()["train"],
                              tokenizer.Encode,
@@ -246,14 +359,19 @@ if __name__ == "__main__":
 
     loss_fn = nn.CrossEntropyLoss(ignore_index=PAD_token).to(device=use_device)
 
-    main_optimizer_fn = torch.optim.Adam(full_model_stack.parameters(), lr=learning_rate)
-    train_loop(
-        classification_head,
-        embedder,
-        transformer,
-        loss_fn,
-        main_optimizer_fn,
-        train_dataloader,
-        len(train_ds),
-        use_device
-    )
+    main_optimizer_fn = torch.optim.Adam(full_model_dict.parameters(), lr=learning_rate)
+    for epoch in range(epochs):
+        print(">Epoch {}:".format(epoch+1))
+        print(">Training...")
+        train_loop(
+            full_model_dict,
+            loss_fn,
+            main_optimizer_fn,
+            train_dataloader,
+            len(train_ds),
+            use_device
+        )
+        print(">Testing...")
+        test_loop(
+
+        )
