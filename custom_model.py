@@ -9,7 +9,7 @@ def generate_decoder_mask(size: int, device: Union[str, torch.device]) -> torch.
 
 
 class SinusoidalPositionalEncoding(nn.Module):
-    def __init__(self, model_dim: int, max_len: int):
+    def __init__(self, model_dim: int, max_len: int, *args, **kwargs):
         super(SinusoidalPositionalEncoding, self).__init__()
         self.encoding = torch.zeros(max_len, model_dim)
         position = torch.arange(0, max_len, dtype=torch.float).unsqueeze(1)
@@ -20,14 +20,23 @@ class SinusoidalPositionalEncoding(nn.Module):
         self.encoding = self.encoding.unsqueeze(0).transpose(0, 1)  # [max_len, 1, model_dim]
         self.register_buffer('pe', self.encoding)
 
+        self.kwargs = {
+            "model_dim": model_dim,
+            "max_len": max_len,
+        }
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.pe[:x.size(0), :]
 
 
 class LearnablePositionalEncoding(nn.Module):
-    def __init__(self, model_dim: int, max_len: int, padding_idx: int):
+    def __init__(self, model_dim: int, max_len: int, padding_idx: int, *args, **kwargs):
         super(LearnablePositionalEncoding, self).__init__()
         self.pos_embed = nn.Embedding(max_len, model_dim, padding_idx=padding_idx)
+        self.kwargs = {
+            "model_dim": model_dim,
+            "max_len": max_len
+        }
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         seq_len, batch_size = x.size()
@@ -42,7 +51,9 @@ class TransformerEmbedding(nn.Module):
                  max_len: int,
                  padding_idx: int,
                  learnable_pos_embeddings: Optional[bool] = False,
-                 dropout_prob: Optional[float] = 0.1):
+                 dropout_prob: Optional[float] = 0.1,
+                 *args,
+                 **kwargs):
         super(TransformerEmbedding, self).__init__()
         self.token_embed = nn.Embedding(vocab_size, model_dim, padding_idx=padding_idx)
         if learnable_pos_embeddings:
@@ -51,6 +62,15 @@ class TransformerEmbedding(nn.Module):
             self.pos_embed = SinusoidalPositionalEncoding(model_dim, max_len)
 
         self.dropout = nn.Dropout(dropout_prob) if dropout_prob != 0.0 else nn.Identity()
+
+        self.kwargs = {
+            "vocab_size": vocab_size,
+            "model_dim": model_dim,
+            "max_len": max_len,
+            "padding_idx": padding_idx,
+            "learnable_pos_embeddings": learnable_pos_embeddings,
+            "dropout_prob": dropout_prob
+        }
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         tokens = self.token_embed(x)
@@ -66,7 +86,9 @@ class BaseTransformerModel(nn.Module):
                  n_decoders: Optional[int] = 6,
                  n_heads: Optional[int] = 8,
                  dropout_prob: Optional[float] = 0.1,
-                 batch_first: Optional[bool] = True
+                 batch_first: Optional[bool] = True,
+                 *args,
+                 **kwargs
                  ):
         super(BaseTransformerModel, self).__init__()
         self.model_dim = model_dim
@@ -80,6 +102,16 @@ class BaseTransformerModel(nn.Module):
         for i in range(n_decoders):
             self.decoders_stack.append(nn.TransformerDecoderLayer(model_dim, n_heads, inner_ff_dim, dropout_prob,
                                                                   batch_first=batch_first))
+
+        self.kwargs = {
+            "model_dim": model_dim,
+            "inner_ff_dim": inner_ff_dim,
+            "n_encoders": n_encoders,
+            "n_decoders": n_decoders,
+            "n_heads": n_heads,
+            "dropout_prob": dropout_prob,
+            "batch_first": batch_first
+        }
 
     def encode(self,
                src: torch.Tensor,
