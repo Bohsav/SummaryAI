@@ -6,7 +6,7 @@
     "datasets_directory": "local_datasets",
     "dataloader_validate": ["gigaword"],
     "dataloader_create_csv": true,
-    "batch_size": 256,
+    "batch_size": 128,
     "device": "best",
     "datasets": {
         "gigaword": {
@@ -38,5 +38,5 @@
             "n_decoders": 6
         }
     },
-    "epochs": 3
+    "epochs": 1
 }

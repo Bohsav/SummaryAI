@@ -47,6 +47,7 @@ def train_loop(
         dataset_length: int,
         all_device: Union[str, torch.device]
 ):
+    model_dict.train()
     classification_head = model_dict["classification_head"]
     embedder = model_dict["embedder"]
     transformer = model_dict["transformer"]
@@ -414,7 +415,7 @@ def main():
         exception_occurred = False
     finally:
         # Persist
-        pathing = os.path.join("./", "runs", "{}".format(datetime.datetime.today()))
+        pathing = os.path.join("./", "runs", "{}".format(datetime.date.today()))
         os.mkdir(pathing)
         destination_folder = "model"
         version_counter = 0
