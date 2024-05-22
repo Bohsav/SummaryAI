@@ -15,6 +15,31 @@ import custom_tokenizer
 
 # Main routine -> add tensorboard
 
+with open("cfg.json", "r") as f:
+    cfg = json.load(f)
+    PAD_TOKEN = cfg["PAD token"]
+    SOS_TOKEN = cfg["SOS token"]
+    EOS_TOKEN = cfg["EOS token"]
+    UNK_TOKEN = cfg["UNK token"]
+    BATCH_SIZE = cfg["batch_size"]
+    VOCAB_SIZE = 32000
+    MODEL_DIM = 512
+    MAX_LEN = 1000
+    LR = 1e-4
+    if cfg["device"] == "best":
+        if torch.cuda.is_available():
+            use_device = "cuda"
+        else:
+            use_device = "cpu"
+    else:
+        use_device = cfg["device"]
+    EPOCHS = cfg["epochs"]
+
+GLOBAL_DEVICE = torch.device(use_device)
+GRAD_NORM = 1.0
+TRAIN_PRINT_BATCHES = 10
+TEST_PRINT_BATCHES = 10
+
 
 def train_loop(
         model_dict: torch.nn.ModuleDict,
@@ -90,10 +115,9 @@ def train_loop(
         print(">loss val: {}".format(loss_val.item()))
         loss_val.backward()
 
-        nn.utils.clip_grad_norm_(full_model_dict.parameters(), 1.0)
+        nn.utils.clip_grad_norm_(model_dict.parameters(), GRAD_NORM)
 
         optim.step()
-
 
 
 def test_loop(model_dict: torch.nn.ModuleDict,
@@ -209,13 +233,6 @@ def test_loop(model_dict: torch.nn.ModuleDict,
                 prediction = classification_head(full_transformer_output)
 
 
-
-def validation_loop(transformer: torch.nn.Module,
-                    val_dataloader: torch.utils.data.DataLoader
-                    ):
-    raise NotImplementedError("")
-
-
 def custom_collate_fn(batch):
     doc_tensors = []
     summary_tensors = []
@@ -228,9 +245,9 @@ def custom_collate_fn(batch):
     summary_tensors = pad_sequence(summary_tensors)
 
     # noinspection PyTypeChecker
-    doc_padding_tensors = torch.where(doc_tensors == 0, 1, 0).transpose(0, 1)
+    doc_padding_tensors = torch.where(doc_tensors == PAD_TOKEN, 1, 0).transpose(0, 1)
     # noinspection PyTypeChecker
-    sum_padding_tensors = torch.where(summary_tensors == 0, 1, 0).transpose(0, 1)
+    sum_padding_tensors = torch.where(summary_tensors == PAD_TOKEN, 1, 0).transpose(0, 1)
     return doc_tensors, summary_tensors, doc_padding_tensors, sum_padding_tensors
 
 
@@ -273,38 +290,16 @@ class CustomDataset(data.Dataset):
         return self.ds.__len__()
 
 
-if __name__ == "__main__":
-    with open("cfg.json", "r") as f:
-        cfg = json.load(f)
-        PAD_token = cfg["PAD token"]
-        SOS_token = cfg["SOS token"]
-        EOS_token = cfg["EOS token"]
-        UNK_token = cfg["UNK token"]
-        batch_size = cfg["batch_size"]
-        vocab_size = 32000
-        model_dim = 512
-        max_len = 1000
-        learning_rate = 1e-4
-        if cfg["device"] == "best":
-            if torch.cuda.is_available():
-                use_device = "cuda"
-            else:
-                use_device = "cpu"
-        else:
-            use_device = cfg["device"]
-        epochs = cfg["epochs"]
-
-    use_device = torch.device(use_device)
-
+def main():
     tokenizer = custom_tokenizer.get_sentencepiece_model()
 
-    embedder = custom_model.TransformerEmbedding(vocab_size=vocab_size,
-                                                 model_dim=model_dim,
-                                                 max_len=max_len,
-                                                 padding_idx=PAD_token,
+    embedder = custom_model.TransformerEmbedding(vocab_size=VOCAB_SIZE,
+                                                 model_dim=MODEL_DIM,
+                                                 max_len=MAX_LEN,
+                                                 padding_idx=PAD_TOKEN,
                                                  learnable_pos_embeddings=True
                                                  )
-    classification_head = nn.Linear(model_dim, vocab_size)
+    classification_head = nn.Linear(MODEL_DIM, VOCAB_SIZE)
 
     transformer = custom_model.BaseTransformerModel(batch_first=False)
 
@@ -318,21 +313,21 @@ if __name__ == "__main__":
                              tokenizer.Encode,
                              True,
                              True,
-                             sos_token=SOS_token,
-                             eos_token=EOS_token
+                             sos_token=SOS_TOKEN,
+                             eos_token=EOS_TOKEN
                              )
     train_dataloader = data.DataLoader(train_ds,
-                                       batch_size=batch_size,
+                                       batch_size=BATCH_SIZE,
                                        shuffle=True,
                                        collate_fn=custom_collate_fn,
                                        drop_last=True
                                        )
 
-    loss_fn = nn.CrossEntropyLoss(ignore_index=PAD_token).to(device=use_device)
+    loss_fn = nn.CrossEntropyLoss(ignore_index=PAD_TOKEN).to(device=use_device)
 
-    main_optimizer_fn = torch.optim.Adam(full_model_dict.parameters(), lr=learning_rate)
-    for epoch in range(epochs):
-        print(">Epoch {}:".format(epoch+1))
+    main_optimizer_fn = torch.optim.Adam(full_model_dict.parameters(), lr=LR)
+    for epoch in range(EPOCHS):
+        print(">Epoch {}:".format(epoch + 1))
         print(">Training...")
         train_loop(
             full_model_dict,
@@ -340,5 +335,9 @@ if __name__ == "__main__":
             main_optimizer_fn,
             train_dataloader,
             len(train_ds),
-            use_device
+            GLOBAL_DEVICE
         )
+
+
+if __name__ == "__main__":
+    main()
