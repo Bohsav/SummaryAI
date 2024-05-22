@@ -1,3 +1,4 @@
+import traceback
 from typing import Optional, Union
 import json
 import torch
@@ -9,7 +10,8 @@ import custom_model
 from torch.nn.utils.rnn import pad_sequence
 import datetime
 import custom_tokenizer
-
+import my_utils
+import os
 
 with open("cfg.json", "r") as f:
     cfg = json.load(f)
@@ -100,10 +102,10 @@ def train_loop(
             target_summary_batch.view(-1).contiguous()
         )
 
-        current_avg += (loss_val.item() - current_avg)/current_avg_n
+        current_avg += (loss_val.item() - current_avg) / current_avg_n
         current_avg_n += 1
 
-        run_avg += (loss_val.item() - run_avg)/run_avg_n
+        run_avg += (loss_val.item() - run_avg) / run_avg_n
         run_avg_n += 1
 
         loss_val.backward()
@@ -126,7 +128,7 @@ def test_loop(model_dict: torch.nn.ModuleDict,
               loss_fn: torch.nn.CrossEntropyLoss,
               test_dataloader: torch.utils.data.DataLoader,
               dataset_length: int,
-              all_device: torch.device
+              all_device: Union[torch.device, str]
               ):
     model_dict.eval()
     with torch.no_grad():
@@ -217,9 +219,9 @@ def test_loop(model_dict: torch.nn.ModuleDict,
                 )
 
                 total_ar_loss += loss_val.item()
-                run_ar_per_token_loss += (loss_val.item() - run_ar_per_token_loss)/run_ar_per_token_loss_n
+                run_ar_per_token_loss += (loss_val.item() - run_ar_per_token_loss) / run_ar_per_token_loss_n
                 run_ar_per_token_loss_n += 1
-            run_ar_total_loss += (total_ar_loss - run_ar_total_loss)/run_ar_total_loss_n
+            run_ar_total_loss += (total_ar_loss - run_ar_total_loss) / run_ar_total_loss_n
             run_ar_total_loss_n += 1
 
             embedded_summary = embedder(input_summary_batch)
@@ -239,10 +241,10 @@ def test_loop(model_dict: torch.nn.ModuleDict,
                 target_summary_batch.view(-1).contiguous()
             )
 
-            run_te_loss += (loss_val.item() - run_te_loss)/run_te_loss_n
+            run_te_loss += (loss_val.item() - run_te_loss) / run_te_loss_n
             run_te_loss_n += 1
 
-            total_te_loss += (loss_val.item() - total_te_loss)/total_te_loss_n
+            total_te_loss += (loss_val.item() - total_te_loss) / total_te_loss_n
             total_te_loss_n += 1
 
             if batch_idx % TEST_PRINT_BATCHES == 0:
@@ -263,13 +265,15 @@ def test_loop(model_dict: torch.nn.ModuleDict,
                 )
                 # Average of the average batch loss per predicated tokens
                 print(
-                    ">Autoregressive loss across {} the most recent tokens: {}".format(run_ar_per_token_loss_n, run_ar_per_token_loss)
+                    ">Autoregressive loss across {} the most recent tokens: {}".format(run_ar_per_token_loss_n,
+                                                                                       run_ar_per_token_loss)
                 )
                 run_ar_per_token_loss_n = 1
                 run_ar_per_token_loss = 0.
                 # Average of the accumulated tokens batch losses
                 print(
-                    ">Autoregressive loss averaged across the accumulated batch token losses: {}".format(run_ar_total_loss)
+                    ">Autoregressive loss averaged across the accumulated batch token losses: {}".format(
+                        run_ar_total_loss)
                 )
 
 
@@ -356,6 +360,7 @@ def main():
                              sos_token=SOS_TOKEN,
                              eos_token=EOS_TOKEN
                              )
+
     train_dataloader = data.DataLoader(train_ds,
                                        batch_size=BATCH_SIZE,
                                        shuffle=True,
@@ -363,20 +368,73 @@ def main():
                                        drop_last=True
                                        )
 
+    test_ds = CustomDataset(custom_dataloader.load_gigaword()["test"],
+                            tokenizer.Encode,
+                            True,
+                            True,
+                            sos_token=SOS_TOKEN,
+                            eos_token=EOS_TOKEN
+                            )
+
+    test_dataloader = data.DataLoader(test_ds,
+                                      batch_size=BATCH_SIZE,
+                                      shuffle=True,
+                                      collate_fn=custom_collate_fn,
+                                      drop_last=True
+                                      )
+
     loss_fn = nn.CrossEntropyLoss(ignore_index=PAD_TOKEN).to(device=use_device)
 
     main_optimizer_fn = torch.optim.Adam(full_model_dict.parameters(), lr=LR)
-    for epoch in range(EPOCHS):
-        print(">Epoch {}:".format(epoch + 1))
-        print(">Training...")
-        train_loop(
-            full_model_dict,
-            loss_fn,
-            main_optimizer_fn,
-            train_dataloader,
-            len(train_ds),
-            GLOBAL_DEVICE
-        )
+
+    exception_occurred = True
+    try:
+        for epoch in range(EPOCHS):
+            print(">Epoch {}:".format(epoch + 1))
+            print(">Training...")
+            train_loop(
+                full_model_dict,
+                loss_fn,
+                main_optimizer_fn,
+                train_dataloader,
+                len(train_ds),
+                GLOBAL_DEVICE
+            )
+            print(">Testing...")
+            test_loop(
+                full_model_dict,
+                loss_fn,
+                test_dataloader,
+                len(test_ds),
+                GLOBAL_DEVICE
+            )
+    except Exception as e:
+        traceback.print_exception(e)
+    else:
+        exception_occurred = False
+    finally:
+        # Persist
+        pathing = os.path.join("./", "runs", "{}".format(datetime.datetime.today()))
+        os.mkdir(pathing)
+        destination_folder = "model"
+        version_counter = 0
+        while os.path.exists(os.path.join(pathing, destination_folder)):
+            destination_folder = "model{}".format(version_counter)
+        pathing = os.path.join(pathing, destination_folder)
+
+        with open(os.path.join(pathing, "info.txt"), "a") as info_file:
+            info_file.write("Basic transformer trained. embedder, transformer, linear projection head")
+            if exception_occurred:
+                info_file.write("Stopping reason: an exception")
+            else:
+                info_file.write("Training finished")
+
+        torch.save(embedder.kwargs, os.path.join(destination_folder, "embedder.kwargs"))
+        torch.save(transformer.kwargs, os.path.join(destination_folder, "transformer.kwargs"))
+        torch.save(main_optimizer_fn.state_dict(), os.path.join(destination_folder, "optimizer.state_dict"))
+        torch.save(full_model_dict.state_dict(), os.path.join(destination_folder, "full_model.state_dict"))
+        torch.save(transformer.state_dict(), os.path.join(destination_folder, "transformer.state_dict"))
+        torch.save(embedder.state_dict(), os.path.join(destination_folder, "embedder.state_dict"))
 
 
 if __name__ == "__main__":
