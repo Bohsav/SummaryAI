@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Union
 import json
 import torch
 from torch import nn
@@ -7,13 +7,9 @@ import datasets
 import custom_dataloader
 import custom_model
 from torch.nn.utils.rnn import pad_sequence
-import tensorboard
 import datetime
-
 import custom_tokenizer
 
-
-# Main routine -> add tensorboard
 
 with open("cfg.json", "r") as f:
     cfg = json.load(f)
@@ -47,21 +43,19 @@ def train_loop(
         optim: torch.optim.Optimizer,
         training_dataloader: data.DataLoader,
         dataset_length: int,
-        all_device
+        all_device: Union[str, torch.device]
 ):
     classification_head = model_dict["classification_head"]
     embedder = model_dict["embedder"]
     transformer = model_dict["transformer"]
     batch_size = training_dataloader.batch_size
+    # Training statistics
+    current_avg = 0.
+    current_avg_n = 0
+    run_avg = 0.
+    run_avg_n = 0
     for batch_idx, (doc_batch, summary_batch, doc_pad_mask, summary_pad_batch) in enumerate(training_dataloader):
         optim.zero_grad()
-        print(">Status:")
-        print(">Current time = {}".format(datetime.datetime.now()))
-        print(">Batch idx = {}".format(batch_idx))
-        print(">Number of values processed = {}".format(batch_idx * batch_size))
-        print(">Progress = {:.2f}%".format(100*(batch_idx * batch_size) / dataset_length))
-        print(">Encoding...")
-
         # Shape: S, N
         doc_batch = doc_batch.to(all_device)
         # Shape: T, N
@@ -74,14 +68,10 @@ def train_loop(
         input_summary_batch = summary_batch * torch.roll(summary_pad_batch.transpose(0, 1).bool().bitwise_not().int(),
                                                          -summary_batch.shape[1])
         input_summary_batch = input_summary_batch[:-1, :]
-        # Target_summary_batch includes the eos token but does not include the sos token.
-        # This is used as the target in loss function calculation.
+        # No SOS token because this is the target
         target_summary_batch = summary_batch[1:, :]
-        # Both of them have the exact same shape
-        # WARNING: Since these could be views of each other,
-        #   they have to be copied for operations
 
-        # Excludes the eos token to align with the future mask
+        # Excludes the eos token
         summary_pad_batch = summary_pad_batch[:, 1:]
         # The triangular attention mask
         # Shape: T, T
@@ -92,8 +82,6 @@ def train_loop(
 
         doc_batch = embedder(doc_batch)
         memory_batch = transformer.encode(doc_batch, src_padding_mask=doc_pad_mask)
-
-        print(">{}: Decoding...".format(datetime.datetime.now()))
 
         embedded_summary = embedder(input_summary_batch)
         decoded_features = transformer.decode(tgt=embedded_summary,
@@ -112,12 +100,25 @@ def train_loop(
             target_summary_batch.view(-1).contiguous()
         )
 
-        print(">loss val: {}".format(loss_val.item()))
+        current_avg_n += 1
+        current_avg = current_avg + (loss_val.item() - current_avg)/current_avg_n
+        run_avg_n += 1
+        run_avg = run_avg + (loss_val.item() - run_avg)/run_avg_n
+
         loss_val.backward()
-
         nn.utils.clip_grad_norm_(model_dict.parameters(), GRAD_NORM)
-
         optim.step()
+
+        if batch_idx % TRAIN_PRINT_BATCHES == 0:
+            print(">Status:")
+            print(">Current time = {}".format(datetime.datetime.now()))
+            print(">Batch idx = {}".format(batch_idx))
+            print(">Number of values processed = {}".format(batch_idx * batch_size))
+            print(">Progress = {:.2f}%".format(100 * (batch_idx * batch_size) / dataset_length))
+            print(">Average of average loss of batch from {} batches: {}".format(current_avg, current_avg_n))
+            current_avg_n = 0
+            current_avg = 0.
+            print(">Online average of average loss across batches: {}".format(run_avg))
 
 
 def test_loop(model_dict: torch.nn.ModuleDict,
@@ -132,14 +133,20 @@ def test_loop(model_dict: torch.nn.ModuleDict,
         classification_head = model_dict["classification_head"]
         embedder = model_dict["embedder"]
         batch_size = test_dataloader.batch_size
-        for batch_idx, (doc_batch, summary_batch, doc_pad_batch, sum_pad_batch) in enumerate(test_dataloader):
-            print(">Status:")
-            print(">Current time = {}".format(datetime.datetime.now()))
-            print(">Batch idx = {}".format(batch_idx))
-            print(">Number of values processed = {}".format(batch_idx * batch_size))
-            print(">Progress = {:.2f}%".format(100 * (batch_idx * batch_size) / dataset_length))
-            print(">Encoding...")
+        # Test statistics
+        # AutoRegressive aka iterative token prediction
+        run_ar_per_token_loss = 0.
+        run_ar_per_token_loss_n = 0
 
+        run_ar_total_loss = 0.
+        run_ar_total_loss_n = 0
+
+        # TeacherEnforced aka evaluate training procedure
+        total_te_loss = 0.
+        total_te_loss_n = 0
+        run_te_loss = 0.
+        run_te_loss_n = 0
+        for batch_idx, (doc_batch, summary_batch, doc_pad_batch, sum_pad_batch) in enumerate(test_dataloader):
             # Sd N
             doc_batch = doc_batch.to(device=all_device)
             # Ss N
@@ -231,6 +238,14 @@ def test_loop(model_dict: torch.nn.ModuleDict,
                 )
 
                 prediction = classification_head(full_transformer_output)
+
+            if batch_idx % TEST_PRINT_BATCHES == 0:
+                print(">Status:")
+                print(">Current time = {}".format(datetime.datetime.now()))
+                print(">Batch idx = {}".format(batch_idx))
+                print(">Number of values processed = {}".format(batch_idx * batch_size))
+                print(">Progress = {:.2f}%".format(100 * (batch_idx * batch_size) / dataset_length))
+                print(">Average total autoregressive loss ")
 
 
 def custom_collate_fn(batch):
