@@ -1,32 +1,44 @@
+from typing import Union, Optional
+
 import sentencepiece as spm
 import json
 import os
 from my_utils import generate_directories
 
 
-def get_sentencepiece_model():
-    with open("cfg.json") as f:
-        config = json.load(f)
+def get_sentencepiece_model(tokenizers_directory: str,
+                            model_name: str,
+                            model_version: str,
+                            force_train: Optional[bool] = False,
+                            training_file: Union[None, str, os.PathLike] = None,
+                            vocab_size: Optional[int] = 32000,
+                            num_threads: Optional[int] = 4,
+                            input_sentence_size: Optional[int] = 0,
+                            shuffle_input_sentence: Optional[bool] = True,
+                            unk_token: Optional[int] = 3,
+                            sos_token: Optional[int] = 1,
+                            eos_token: Optional[int] = 2,
+                            pad_token: Optional[int] = 0,
+                            *args,
+                            **kwargs
+                            ):
 
     generate_directories(
-        {"{}".format(config["tokenizers_directory"]): {
-            "sentencepiece": {
-                "{}_{}".format(config["tokenizers"]["sentencepiece"]["model_name"],
-                               config["tokenizers"]["sentencepiece"]["version"]): {}
+        {tokenizers_directory: {
+                "sentencepiece": {
+                    "{}_{}".format(model_name, model_version): {}
+                }
             }
-        }
         }
     )
 
     current_path = os.path.join("./",
-                                config["tokenizers_directory"],
+                                tokenizers_directory,
                                 "sentencepiece",
-                                "{}_{}".format(config["tokenizers"]["sentencepiece"]["model_name"],
-                                               config["tokenizers"]["sentencepiece"]["version"]))
+                                "{}_{}".format(model_name, model_version)
+                                )
 
-    training_file = config["tokenizers"]["sentencepiece"]["input_file"]
-
-    if config["tokenizers"]["sentencepiece"]["force_train"]:
+    if force_train:
         inquiry = (" --input={}"
                    " --model_prefix={} "
                    " --vocab_size={}"
@@ -40,17 +52,17 @@ def get_sentencepiece_model():
             training_file,
 
             "{}/{}_{}".format(current_path,
-                              config["tokenizers"]["sentencepiece"]["model_name"],
-                              config["tokenizers"]["sentencepiece"]["version"]),
+                              model_name,
+                              model_version),
 
-            config["tokenizers"]["sentencepiece"]["vocab_size"],
-            config["tokenizers"]["sentencepiece"]["num_threads"],
-            config["tokenizers"]["sentencepiece"]["input_sentence_size"],
-            config["tokenizers"]["sentencepiece"]["shuffle_input_sentence"],
-            config["UNK token"],
-            config["SOS token"],
-            config["EOS token"],
-            config["PAD token"]
+            vocab_size,
+            num_threads,
+            input_sentence_size,
+            shuffle_input_sentence,
+            unk_token,
+            sos_token,
+            eos_token,
+            pad_token
         )
 
         info_txt = "Log:\nTrained on: {}\n".format(training_file)
@@ -63,10 +75,7 @@ def get_sentencepiece_model():
     model.Load(
         os.path.join(
             current_path,
-            "{}_{}.model".format(
-                config["tokenizers"]["sentencepiece"]["model_name"],
-                config["tokenizers"]["sentencepiece"]["version"]
-            )
+            "{}_{}.model".format(model_name, model_version)
         )
     )
 

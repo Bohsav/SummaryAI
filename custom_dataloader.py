@@ -1,18 +1,21 @@
 from typing import Optional
-from datasets import load_dataset, DownloadMode
+from datasets import load_dataset, DownloadMode, DatasetDict
 import json
 import os
 
 
-def save_loaded_dataset(loaded_dataset_name: str, cached_dataset):
-    with open("cfg.json") as f:
-        cfg_file = json.load(f)
-        for split in cached_dataset.keys():
-            cached_dataset[split].to_csv(
-                os.path.join(cfg_file["datasets_directory"],
-                             cfg_file["datasets"][loaded_dataset_name]["name"],
-                             f"{split}.csv")
-            )
+def save_loaded_dataset(datasets_directory: str,
+                        dataset_name: str,
+                        loaded_dataset_name: str,
+                        cached_dataset: DatasetDict
+                        ):
+
+    for split in cached_dataset.keys():
+        cached_dataset[split].to_csv(
+            os.path.join(datasets_directory,
+                         dataset_name,
+                         f"{split}.csv")
+        )
 
 
 def load_gigaword():
@@ -38,12 +41,6 @@ def load_gigaword():
 supported_datasets = {
     "gigaword": load_gigaword
 }
-
-
-# def build_torch_dataset(available_dataset_name: str, split: str, transform: Optional[list] = None,
-#                         target_transform: Optional[list] = None):
-#     torch_dataset = supported_datasets[available_dataset_name]()[split].set_format(type="torch")
-#     return torch_dataset
 
 
 if __name__ == "__main__":
