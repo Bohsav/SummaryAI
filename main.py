@@ -174,7 +174,7 @@ def test_loop(model_dict: torch.nn.ModuleDict,
                 diagonal=1
             ).to(device=all_device, dtype=torch.bool)
 
-            future_mask = torch.ones(input_summary_batch.shape, device=all_device, dtype=torch.bool)
+            future_mask = torch.ones(sum_pad_batch.shape, device=all_device, dtype=torch.bool)
 
             memory_batch = transformer.encode(
                 embedder(doc_batch),
@@ -196,9 +196,9 @@ def test_loop(model_dict: torch.nn.ModuleDict,
                 total_mask = sum_pad_batch.bitwise_or(future_mask)
 
                 masked_input_summary_batch = input_summary_batch.mul(total_mask.bitwise_not().int().transpose(0, 1))
-                masked_target_summary_batch = target_summary_batch.mul(total_mask.bitwise_not().int().tranpose(0, 1))
+                masked_target_summary_batch = target_summary_batch.mul(total_mask.bitwise_not().int().transpose(0, 1))
 
-                embedded_current_summary = embedder(input_summary_batch)
+                embedded_current_summary = embedder(masked_input_summary_batch)
                 embedded_current_summary = transformer.decode(
                     tgt=embedded_current_summary,
                     memory=memory_batch,
