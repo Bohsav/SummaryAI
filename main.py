@@ -415,13 +415,22 @@ def main():
         exception_occurred = False
     finally:
         # Persist
-        pathing = os.path.join("./", "runs", "{}".format(datetime.date.today()))
-        os.mkdir(pathing)
+        date_folder = "{}".format(datetime.date.today())
+        my_utils.generate_directories(
+            {"runs" :
+                 {date_folder :
+                      {}
+                 }
+            }
+        )
+        pathing = os.path.join("runs", date_folder)
         destination_folder = "model"
         version_counter = 0
         while os.path.exists(os.path.join(pathing, destination_folder)):
             destination_folder = "model{}".format(version_counter)
+            version_counter += 1
         pathing = os.path.join(pathing, destination_folder)
+        os.mkdir(pathing)
 
         with open(os.path.join(pathing, "info.txt"), "a") as info_file:
             info_file.write("Basic transformer trained. embedder, transformer, linear projection head")
@@ -430,12 +439,17 @@ def main():
             else:
                 info_file.write("Training finished")
 
-        torch.save(embedder.kwargs, os.path.join(destination_folder, "embedder.kwargs"))
-        torch.save(transformer.kwargs, os.path.join(destination_folder, "transformer.kwargs"))
-        torch.save(main_optimizer_fn.state_dict(), os.path.join(destination_folder, "optimizer.state_dict"))
-        torch.save(full_model_dict.state_dict(), os.path.join(destination_folder, "full_model.state_dict"))
-        torch.save(transformer.state_dict(), os.path.join(destination_folder, "transformer.state_dict"))
-        torch.save(embedder.state_dict(), os.path.join(destination_folder, "embedder.state_dict"))
+        with open(os.path.join(pathing, "kwargs.json"), "w", encoding="utf-8") as file:
+            json.dump({
+                "embedder": embedder.kwargs,
+                "transformer": transformer.kwargs,
+                "cfg": cfg
+            }, file, ensure_ascii=False, indent=4)
+
+        torch.save(main_optimizer_fn.state_dict(), os.path.join(pathing, "optimizer.state_dict"))
+        torch.save(full_model_dict.state_dict(), os.path.join(pathing, "full_model.state_dict"))
+        torch.save(transformer.state_dict(), os.path.join(pathing, "transformer.state_dict"))
+        torch.save(embedder.state_dict(), os.path.join(pathing, "embedder.state_dict"))
 
 
 if __name__ == "__main__":
