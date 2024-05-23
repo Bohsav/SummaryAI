@@ -33,10 +33,14 @@ with open("cfg.json", "r") as f:
         use_device = cfg["device"]
     EPOCHS = cfg["epochs"]
 
+BETA_1 = 0.9
+BETA_2 = 0.98
+EPS = 1e-9
+
 GLOBAL_DEVICE = torch.device(use_device)
 GRAD_NORM = 1.0
-TRAIN_PRINT_BATCHES = 10
-TEST_PRINT_BATCHES = 10
+TRAIN_PRINT_BATCHES = 20
+TEST_PRINT_BATCHES = 20
 
 
 def train_loop(
@@ -342,7 +346,7 @@ def main():
                                                  model_dim=MODEL_DIM,
                                                  max_len=MAX_LEN,
                                                  padding_idx=PAD_TOKEN,
-                                                 learnable_pos_embeddings=True
+                                                 learnable_pos_embeddings=False
                                                  )
     classification_head = nn.Linear(MODEL_DIM, VOCAB_SIZE)
 
@@ -386,7 +390,11 @@ def main():
 
     loss_fn = nn.CrossEntropyLoss(ignore_index=PAD_TOKEN).to(device=use_device)
 
-    main_optimizer_fn = torch.optim.Adam(full_model_dict.parameters(), lr=LR)
+    main_optimizer_fn = torch.optim.AdamW(full_model_dict.parameters(),
+                                          lr=LR,
+                                          betas=(BETA_1, BETA_2),
+                                          eps=EPS,
+                                          )
 
     exception_occurred = True
     try:
