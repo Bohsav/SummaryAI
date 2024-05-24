@@ -54,8 +54,9 @@
         "tokenizer": "sentencepiece",
         "train_status_print": 20,
         "test_status_print": 20,
-        "model_params": "transformer",
-        "optimizer_params": "adamW",
-        "grad_norm": 1.0
+        "model": "transformer",
+        "optimizer": "adamW",
+        "grad_norm": 1.0,
+        "max_len": 1000
     }
 }

@@ -15,32 +15,32 @@ import os
 
 with open("cfg.json", "r") as f:
     cfg = json.load(f)
-    PAD_TOKEN = cfg["PAD token"]
-    SOS_TOKEN = cfg["SOS token"]
-    EOS_TOKEN = cfg["EOS token"]
-    UNK_TOKEN = cfg["UNK token"]
-    BATCH_SIZE = cfg["batch_size"]
-    VOCAB_SIZE = 32000
-    MODEL_DIM = 512
-    MAX_LEN = 1000
-    LR = 1e-4
-    if cfg["device"] == "best":
-        if torch.cuda.is_available():
-            use_device = "cuda"
-        else:
-            use_device = "cpu"
+PAD_TOKEN = cfg["general"]["pad_token"]
+SOS_TOKEN = cfg["general"]["sos_token"]
+EOS_TOKEN = cfg["general"]["eos_token"]
+UNK_TOKEN = cfg["general"]["unk_token"]
+BATCH_SIZE = cfg["main_run_params"]["batch_size"]
+VOCAB_SIZE = cfg["tokenizers"][cfg["main_run_params"]["tokenizer"]]["vocab_size"]
+MODEL_DIM = cfg["models"][cfg["main_run_params"]["model"]]["model_dim"]
+MAX_LEN = cfg["main_run_params"]["max_len"]
+LR = cfg["optimizers"][cfg["main_run_params"]["optimizer"]]["learning_rate"]
+if cfg["main_run_params"]["device"] == "best":
+    if torch.cuda.is_available():
+        use_device = "cuda"
     else:
-        use_device = cfg["device"]
-    EPOCHS = cfg["epochs"]
-
-BETA_1 = 0.9
-BETA_2 = 0.98
-EPS = 1e-9
-
+        use_device = "cpu"
+else:
+    use_device = cfg["device"]
 GLOBAL_DEVICE = torch.device(use_device)
-GRAD_NORM = 1.0
-TRAIN_PRINT_BATCHES = 20
-TEST_PRINT_BATCHES = 20
+EPOCHS = cfg["main_run_params"]["epochs"]
+
+BETA_1 = cfg["optimizers"][cfg["main_run_params"]["optimizer"]]["beta_1"]
+BETA_2 = cfg["optimizers"][cfg["main_run_params"]["optimizer"]]["beta_2"]
+EPS = cfg["optimizers"][cfg["main_run_params"]["optimizer"]]["eps"]
+
+GRAD_NORM = cfg["main_run_params"]["grad_norm"]
+TRAIN_PRINT_BATCHES = cfg["main_run_params"]["train_status_print"]
+TEST_PRINT_BATCHES = cfg["main_run_params"]["test_status_print"]
 
 
 def train_loop(
@@ -340,7 +340,13 @@ class CustomDataset(data.Dataset):
 
 
 def main():
-    tokenizer = custom_tokenizer.get_sentencepiece_model()
+    if cfg["main_run_params"]["tokenizer"] == "sentencepiece":
+        tokenizer = custom_tokenizer.get_sentencepiece_model(
+            **cfg["general"],
+            **cfg["tokenizers"]["sentencepiece"]
+        )
+    else:
+        raise KeyError("Unknown key {}".format(cfg["main_run_params"]["tokenizer"]))
 
     embedder = custom_model.TransformerEmbedding(vocab_size=VOCAB_SIZE,
                                                  model_dim=MODEL_DIM,
