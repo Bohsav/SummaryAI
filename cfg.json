@@ -8,15 +8,13 @@
         "tokenizers_directory": "local_tokenizers"
     },
     "datasets": {
-        "hugging_face": {
-            "gigaword": {
-                "name": "gigaword",
-                "force_download": false,
-                "num_workers": 4,
-                "trust_remote_code": false,
-                "stream": false,
-                "create_csv": true
-            }
+        "gigaword": {
+            "name": "gigaword",
+            "force_download": false,
+            "num_workers": 4,
+            "trust_remote_code": false,
+            "stream": false,
+            "create_csv": true
         }
     },
     "tokenizers": {
@@ -57,6 +55,7 @@
         "model": "transformer",
         "optimizer": "adamW",
         "grad_norm": 1.0,
-        "max_len": 1000
+        "max_len": 1000,
+        "checkpoint_path": ""
     }
 }

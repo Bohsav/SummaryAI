@@ -354,6 +354,7 @@ def main():
                                                  padding_idx=PAD_TOKEN,
                                                  learnable_pos_embeddings=False
                                                  )
+
     classification_head = nn.Linear(MODEL_DIM, VOCAB_SIZE)
 
     transformer = custom_model.BaseTransformerModel(batch_first=False)
@@ -364,7 +365,29 @@ def main():
         "classification_head": classification_head
     }).to(device=use_device)
 
-    train_ds = CustomDataset(custom_dataloader.load_gigaword()["train"],
+    if cfg["main_run_params"]["checkpoint_path"] != "":
+        full_model_dict.load_state_dict(
+            torch.load(os.path.join(cfg["main_run_params"]["checkpoint_path"], "full_model.state_dict"))
+        )
+
+    loss_fn = nn.CrossEntropyLoss(ignore_index=PAD_TOKEN).to(device=use_device)
+
+    main_optimizer_fn = torch.optim.AdamW(full_model_dict.parameters(),
+                                          lr=LR,
+                                          betas=(BETA_1, BETA_2),
+                                          eps=EPS,
+                                          )
+
+    if cfg["main_run_params"]["checkpoint_path"] != "":
+        main_optimizer_fn.load_state_dict(
+            torch.load(os.path.join(cfg["main_run_params"]["checkpoint_path"], "optimizer.state_dict"))
+        )
+
+    gigaword_ds = custom_dataloader.load_gigaword(cfg["general"]["local_datasets"],
+                                                  **cfg["datasets"]["gigaword"]
+                                                  )
+
+    train_ds = CustomDataset(gigaword_ds["train"],
                              tokenizer.Encode,
                              True,
                              True,
@@ -379,7 +402,7 @@ def main():
                                        drop_last=True
                                        )
 
-    test_ds = CustomDataset(custom_dataloader.load_gigaword()["test"],
+    test_ds = CustomDataset(gigaword_ds["test"],
                             tokenizer.Encode,
                             True,
                             True,
@@ -393,14 +416,6 @@ def main():
                                       collate_fn=custom_collate_fn,
                                       drop_last=True
                                       )
-
-    loss_fn = nn.CrossEntropyLoss(ignore_index=PAD_TOKEN).to(device=use_device)
-
-    main_optimizer_fn = torch.optim.AdamW(full_model_dict.parameters(),
-                                          lr=LR,
-                                          betas=(BETA_1, BETA_2),
-                                          eps=EPS,
-                                          )
 
     exception_occurred = True
     try:
