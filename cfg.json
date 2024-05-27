@@ -51,7 +51,7 @@
         "device": "best",
         "tokenizer": "sentencepiece",
         "train_status_print": 20,
-        "test_status_print": 20,
+        "validation_status_print": 20,
         "model": "transformer",
         "optimizer": "adamW",
         "grad_norm": 1.0,

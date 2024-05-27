@@ -40,7 +40,7 @@ EPS = cfg["optimizers"][cfg["main_run_params"]["optimizer"]]["eps"]
 
 GRAD_NORM = cfg["main_run_params"]["grad_norm"]
 TRAIN_PRINT_BATCHES = cfg["main_run_params"]["train_status_print"]
-TEST_PRINT_BATCHES = cfg["main_run_params"]["test_status_print"]
+VAL_PRINT_BATCHES = cfg["main_run_params"]["validation_status_print"]
 
 
 def train_loop(
@@ -253,7 +253,7 @@ def validation_loop(model_dict: torch.nn.ModuleDict,
             total_te_loss += (loss_val.item() - total_te_loss) / total_te_loss_n
             total_te_loss_n += 1
 
-            if batch_idx % TEST_PRINT_BATCHES == 0:
+            if batch_idx % VAL_PRINT_BATCHES == 0:
                 print(">Status:")
                 print(">Current time = {}".format(datetime.datetime.now()))
                 print(">Batch idx = {}".format(batch_idx))
@@ -425,14 +425,14 @@ def main():
         for epoch in range(EPOCHS):
             print(">Epoch {}:".format(epoch + 1))
             print(">Training...")
-            # train_loop(
-            #     full_model_dict,
-            #     loss_fn,
-            #     main_optimizer_fn,
-            #     train_dataloader,
-            #     len(train_ds),
-            #     GLOBAL_DEVICE
-            # )
+            train_loop(
+                full_model_dict,
+                loss_fn,
+                main_optimizer_fn,
+                train_dataloader,
+                len(train_ds),
+                GLOBAL_DEVICE
+            )
             print(">Validation...")
             validation_loop(
                 full_model_dict,
