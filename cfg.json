@@ -20,7 +20,7 @@
     "tokenizers": {
         "sentencepiece": {
             "model_name": "spm_m",
-            "version": "1_0",
+            "model_version": "1_0",
             "vocab_size": 32000,
             "force_train": false,
             "num_threads": 12,

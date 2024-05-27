@@ -129,18 +129,18 @@ def train_loop(
             print(">Online average of average loss across batches: {}".format(run_avg))
 
 
-def test_loop(model_dict: torch.nn.ModuleDict,
-              loss_fn: torch.nn.CrossEntropyLoss,
-              test_dataloader: torch.utils.data.DataLoader,
-              dataset_length: int,
-              all_device: Union[torch.device, str]
-              ):
+def validation_loop(model_dict: torch.nn.ModuleDict,
+                    loss_fn: torch.nn.CrossEntropyLoss,
+                    val_dataloader: torch.utils.data.DataLoader,
+                    dataset_length: int,
+                    all_device: Union[torch.device, str]
+                    ):
     model_dict.eval()
     with torch.no_grad():
         transformer = model_dict["transformer"]
         classification_head = model_dict["classification_head"]
         embedder = model_dict["embedder"]
-        batch_size = test_dataloader.batch_size
+        batch_size = val_dataloader.batch_size
         # Test statistics
         # AutoRegressive aka iterative token prediction
         run_ar_per_token_loss = 0.
@@ -154,7 +154,7 @@ def test_loop(model_dict: torch.nn.ModuleDict,
         total_te_loss_n = 1
         run_te_loss = 0.
         run_te_loss_n = 1
-        for batch_idx, (doc_batch, summary_batch, doc_pad_batch, sum_pad_batch) in enumerate(test_dataloader):
+        for batch_idx, (doc_batch, summary_batch, doc_pad_batch, sum_pad_batch) in enumerate(val_dataloader):
             # Sd N
             doc_batch = doc_batch.to(device=all_device)
             # Ss N
@@ -226,6 +226,7 @@ def test_loop(model_dict: torch.nn.ModuleDict,
                 total_ar_loss += loss_val.item()
                 run_ar_per_token_loss += (loss_val.item() - run_ar_per_token_loss) / run_ar_per_token_loss_n
                 run_ar_per_token_loss_n += 1
+
             run_ar_total_loss += (total_ar_loss - run_ar_total_loss) / run_ar_total_loss_n
             run_ar_total_loss_n += 1
 
@@ -369,6 +370,7 @@ def main():
         full_model_dict.load_state_dict(
             torch.load(os.path.join(cfg["main_run_params"]["checkpoint_path"], "full_model.state_dict"))
         )
+        print("CHECKPOINT: Loaded full model state dict from {}".format(cfg["main_run_params"]["checkpoint_path"]))
 
     loss_fn = nn.CrossEntropyLoss(ignore_index=PAD_TOKEN).to(device=use_device)
 
@@ -382,9 +384,10 @@ def main():
         main_optimizer_fn.load_state_dict(
             torch.load(os.path.join(cfg["main_run_params"]["checkpoint_path"], "optimizer.state_dict"))
         )
+        print("CHECKPOINT: Loaded optimizer state dict from {}".format(cfg["main_run_params"]["checkpoint_path"]))
 
-    gigaword_ds = custom_dataloader.load_gigaword(cfg["general"]["local_datasets"],
-                                                  **cfg["datasets"]["gigaword"]
+    gigaword_ds = custom_dataloader.load_gigaword(cfg["general"]["datasets_directory"],
+                                                  cfg["datasets"]["gigaword"]
                                                   )
 
     train_ds = CustomDataset(gigaword_ds["train"],
@@ -402,40 +405,40 @@ def main():
                                        drop_last=True
                                        )
 
-    test_ds = CustomDataset(gigaword_ds["test"],
-                            tokenizer.Encode,
-                            True,
-                            True,
-                            sos_token=SOS_TOKEN,
-                            eos_token=EOS_TOKEN
-                            )
+    validation_ds = CustomDataset(gigaword_ds["validation"],
+                                  tokenizer.Encode,
+                                  True,
+                                  True,
+                                  sos_token=SOS_TOKEN,
+                                  eos_token=EOS_TOKEN
+                                  )
 
-    test_dataloader = data.DataLoader(test_ds,
-                                      batch_size=BATCH_SIZE,
-                                      shuffle=True,
-                                      collate_fn=custom_collate_fn,
-                                      drop_last=True
-                                      )
+    validation_dataloader = data.DataLoader(validation_ds,
+                                            batch_size=BATCH_SIZE,
+                                            shuffle=True,
+                                            collate_fn=custom_collate_fn,
+                                            drop_last=True
+                                            )
 
     exception_occurred = True
     try:
         for epoch in range(EPOCHS):
             print(">Epoch {}:".format(epoch + 1))
             print(">Training...")
-            train_loop(
+            # train_loop(
+            #     full_model_dict,
+            #     loss_fn,
+            #     main_optimizer_fn,
+            #     train_dataloader,
+            #     len(train_ds),
+            #     GLOBAL_DEVICE
+            # )
+            print(">Validation...")
+            validation_loop(
                 full_model_dict,
                 loss_fn,
-                main_optimizer_fn,
-                train_dataloader,
-                len(train_ds),
-                GLOBAL_DEVICE
-            )
-            print(">Testing...")
-            test_loop(
-                full_model_dict,
-                loss_fn,
-                test_dataloader,
-                len(test_ds),
+                validation_dataloader,
+                len(validation_ds),
                 GLOBAL_DEVICE
             )
     except Exception as e:
@@ -462,11 +465,12 @@ def main():
         os.mkdir(pathing)
 
         with open(os.path.join(pathing, "info.txt"), "a") as info_file:
-            info_file.write("Basic transformer trained. embedder, transformer, linear projection head")
+            info_file.write("{}. ".format(datetime.datetime.now()))
+            info_file.write("Basic transformer trained. embedder, transformer, linear projection head. ")
             if exception_occurred:
                 info_file.write("Stopping reason: an exception")
             else:
-                info_file.write("Training finished")
+                info_file.write("Training finished. ")
 
         with open(os.path.join(pathing, "kwargs.json"), "w", encoding="utf-8") as file:
             json.dump({
