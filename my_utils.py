@@ -2,9 +2,33 @@ import os
 import csv
 import string
 import traceback
+from typing import Optional
 
 
-def generate_directories(dir_dict: dict, current_path: str = "./"):
+class OnlineAvg:
+    def __init__(self, init_val: Optional[float] = 0., init_counter: Optional[int] = 0):
+        self.val = init_val
+        self.n = init_counter
+
+    def increment(self, new_val: float, increment_size: int):
+        self.val = (self.n*self.val+increment_size*new_val)/(self.n+increment_size)
+        self.n += increment_size
+
+    def get_val(self):
+        return self.val
+
+    def get_counter(self):
+        return self.n
+
+    def reset(self, reset_val: Optional[float] = 0., reset_counter: Optional[int] = 0):
+        self.val = reset_val
+        self.n = reset_counter
+
+    def __str__(self):
+        return "{}".format(self.get_val())
+
+
+def generate_directories(dir_dict: dict, current_path: Optional[str] = "./"):
     if dir_dict == {}:
         return
     for directory in dir_dict:

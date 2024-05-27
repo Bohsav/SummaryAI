@@ -57,10 +57,8 @@ def train_loop(
     transformer = model_dict["transformer"]
     batch_size = training_dataloader.batch_size
     # Training statistics
-    current_avg = 0.
-    current_avg_n = 1
-    run_avg = 0.
-    run_avg_n = 1
+    total_avg_loss = my_utils.OnlineAvg()
+    temp_avg_loss = my_utils.OnlineAvg()
     for batch_idx, (doc_batch, summary_batch, doc_pad_mask, summary_pad_batch) in enumerate(training_dataloader):
         optim.zero_grad()
         # Shape: S, N
@@ -107,11 +105,8 @@ def train_loop(
             target_summary_batch.view(-1).contiguous()
         )
 
-        current_avg += (loss_val.item() - current_avg) / current_avg_n
-        current_avg_n += 1
-
-        run_avg += (loss_val.item() - run_avg) / run_avg_n
-        run_avg_n += 1
+        total_avg_loss.increment(loss_val.item(), batch_size)
+        temp_avg_loss.increment(loss_val.item(), batch_size)
 
         loss_val.backward()
         nn.utils.clip_grad_norm_(model_dict.parameters(), GRAD_NORM)
@@ -123,10 +118,11 @@ def train_loop(
             print(">Batch idx = {}".format(batch_idx))
             print(">Number of values processed = {}".format(batch_idx * batch_size))
             print(">Progress = {:.2f}%".format(100 * (batch_idx * batch_size) / dataset_length))
-            print(">Average of average loss of batch from {} batches: {}".format(current_avg, current_avg_n))
-            current_avg_n = 1
-            current_avg = 0.
-            print(">Online average of average loss across batches: {}".format(run_avg))
+            print(">Online average loss across all tokens from {} last batches: {}".format(
+                temp_avg_loss.get_counter(), temp_avg_loss)
+            )
+            temp_avg_loss.reset()
+            print(">Online average loss across all batches: {}".format(total_avg_loss))
 
 
 def validation_loop(model_dict: torch.nn.ModuleDict,
@@ -143,17 +139,11 @@ def validation_loop(model_dict: torch.nn.ModuleDict,
         batch_size = val_dataloader.batch_size
         # Test statistics
         # AutoRegressive aka iterative token prediction
-        run_ar_per_token_loss = 0.
-        run_ar_per_token_loss_n = 1
-
-        run_ar_total_loss = 0.
-        run_ar_total_loss_n = 1
-
+        total_ar_loss_avg = my_utils.OnlineAvg()
+        per_token_ar_loss_avg = my_utils.OnlineAvg()
         # TeacherEnforced aka evaluate training procedure
-        total_te_loss = 0.
-        total_te_loss_n = 1
-        run_te_loss = 0.
-        run_te_loss_n = 1
+        total_te_loss_avg = my_utils.OnlineAvg()
+        temp_te_loss_avg = my_utils.OnlineAvg()
         for batch_idx, (doc_batch, summary_batch, doc_pad_batch, sum_pad_batch) in enumerate(val_dataloader):
             # Sd N
             doc_batch = doc_batch.to(device=all_device)
@@ -216,19 +206,17 @@ def validation_loop(model_dict: torch.nn.ModuleDict,
 
                 prediction = classification_head(embedded_current_summary)
 
-                prediction = prediction * total_mask.bitwise_not().int().transpose(0, 1).unsqueeze(-1)
+                # prediction = prediction * total_mask.bitwise_not().int().transpose(0, 1).unsqueeze(-1)
 
                 loss_val = loss_fn(
-                    prediction.view(-1, prediction.shape[-1]).contiguous(),
-                    masked_target_summary_batch.view(-1).contiguous()
+                    prediction[i],
+                    masked_target_summary_batch[i]
                 )
 
                 total_ar_loss += loss_val.item()
-                run_ar_per_token_loss += (loss_val.item() - run_ar_per_token_loss) / run_ar_per_token_loss_n
-                run_ar_per_token_loss_n += 1
+                per_token_ar_loss_avg.increment(loss_val.item(), batch_size)
 
-            run_ar_total_loss += (total_ar_loss - run_ar_total_loss) / run_ar_total_loss_n
-            run_ar_total_loss_n += 1
+            total_ar_loss_avg.increment(total_ar_loss, 1)
 
             embedded_summary = embedder(input_summary_batch)
             decoded_features = transformer.decode(tgt=embedded_summary,
@@ -247,11 +235,9 @@ def validation_loop(model_dict: torch.nn.ModuleDict,
                 target_summary_batch.view(-1).contiguous()
             )
 
-            run_te_loss += (loss_val.item() - run_te_loss) / run_te_loss_n
-            run_te_loss_n += 1
+            temp_te_loss_avg.increment(loss_val.item(), batch_size)
 
-            total_te_loss += (loss_val.item() - total_te_loss) / total_te_loss_n
-            total_te_loss_n += 1
+            total_te_loss_avg.increment(loss_val.item(), batch_size)
 
             if batch_idx % VAL_PRINT_BATCHES == 0:
                 print(">Status:")
@@ -260,27 +246,15 @@ def validation_loop(model_dict: torch.nn.ModuleDict,
                 print(">Number of values processed = {}".format(batch_idx * batch_size))
                 print(">Progress = {:.2f}%".format(100 * (batch_idx * batch_size) / dataset_length))
                 print(">METRICS:")
-                # Average of the average batch loss across all teacher enforced tokens
                 print(
-                    ">Teacher enforced loss across the most recent {} batches: {}".format(run_te_loss_n, run_te_loss)
+                    ">Teacher enforced loss across the most recent {} batches: {}".format(temp_te_loss_avg.get_counter(), temp_te_loss_avg)
                 )
-                run_te_loss = 0.
-                run_te_loss_n = 1
+                temp_te_loss_avg.reset()
                 print(
-                    ">Teacher enforced loss across {} batches from start: {}".format(total_te_loss_n, total_te_loss)
+                    ">Teacher enforced loss across all batches from the start: {}".format(total_te_loss_avg)
                 )
-                # Average of the average batch loss per predicated tokens
-                print(
-                    ">Autoregressive loss across {} the most recent tokens: {}".format(run_ar_per_token_loss_n,
-                                                                                       run_ar_per_token_loss)
-                )
-                run_ar_per_token_loss_n = 1
-                run_ar_per_token_loss = 0.
-                # Average of the accumulated tokens batch losses
-                print(
-                    ">Autoregressive loss averaged across the accumulated batch token losses: {}".format(
-                        run_ar_total_loss)
-                )
+                print(">Autoregressive loss across all tokens: {}".format(per_token_ar_loss_avg))
+                print(">Autoregressive total average loss: {}".format(total_ar_loss_avg))
 
 
 def custom_collate_fn(batch):
