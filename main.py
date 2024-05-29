@@ -315,13 +315,10 @@ class CustomDataset(data.Dataset):
 
 
 def main():
-    if cfg["main_run_params"]["tokenizer"] == "sentencepiece":
-        tokenizer = custom_tokenizer.get_sentencepiece_model(
-            **cfg["general"],
-            **cfg["tokenizers"]["sentencepiece"]
-        )
-    else:
-        raise KeyError("Unknown key {}".format(cfg["main_run_params"]["tokenizer"]))
+    tokenizer = custom_tokenizer.get_sentencepiece_model(
+        **cfg["general"],
+        **cfg["tokenizers"]["sentencepiece"]
+    )
 
     embedder = custom_model.TransformerEmbedding(vocab_size=VOCAB_SIZE,
                                                  model_dim=MODEL_DIM,
@@ -361,7 +358,7 @@ def main():
         print("CHECKPOINT: Loaded optimizer state dict from {}".format(cfg["main_run_params"]["checkpoint_path"]))
 
     gigaword_ds = custom_dataloader.load_gigaword(cfg["general"]["datasets_directory"],
-                                                  cfg["datasets"]["gigaword"]
+                                                  **cfg["datasets"]["gigaword"]
                                                   )
 
     train_ds = CustomDataset(gigaword_ds["train"],
