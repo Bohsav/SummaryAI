@@ -18,20 +18,21 @@ def save_loaded_dataset(datasets_directory: str,
         )
 
 
-def load_gigaword(datasets_directory: str, giga_word_kwargs: dict):
-    download_mode = DownloadMode.FORCE_REDOWNLOAD if \
-        giga_word_kwargs["force_download"] else DownloadMode.REUSE_DATASET_IF_EXISTS
+def load_gigaword(datasets_directory: str,
+                  name,
+                  force_download: Optional[bool] = False,
+                  num_proc: Optional[int] = None,
+                  trust_remote_code: Optional[bool] = False,
+                  streaming: Optional[bool] = False
+                  ):
+    download_mode = DownloadMode.FORCE_REDOWNLOAD if force_download else DownloadMode.REUSE_DATASET_IF_EXISTS
 
-    num_proc = None if giga_word_kwargs["num_workers"] == 0 \
-        else giga_word_kwargs["num_workers"]
-
-    dataset = load_dataset(path=giga_word_kwargs["name"],
+    dataset = load_dataset(path=name,
                            download_mode=download_mode,
                            num_proc=num_proc,
-                           trust_remote_code=giga_word_kwargs["trust_remote_code"],
-                           cache_dir="{}/{}/cache".format(datasets_directory,
-                                                          giga_word_kwargs["name"]),
-                           streaming=giga_word_kwargs["stream"]
+                           trust_remote_code=trust_remote_code,
+                           cache_dir=os.path.join(datasets_directory, name, "cache"),
+                           streaming=streaming
                            )
     return dataset
 
