@@ -1,6 +1,6 @@
 import traceback
 from typing import Optional, Union
-import json
+import yaml
 import torch
 from torch import nn
 from torch.utils import data
@@ -13,18 +13,18 @@ import custom_tokenizer
 import my_utils
 import os
 
-with open("cfg.json", "r") as f:
-    cfg = json.load(f)
+with open("config.yaml", "r") as f:
+    cfg = yaml.load(f, yaml.Loader)
 PAD_TOKEN = cfg["general"]["pad_token"]
 SOS_TOKEN = cfg["general"]["sos_token"]
 EOS_TOKEN = cfg["general"]["eos_token"]
 UNK_TOKEN = cfg["general"]["unk_token"]
-BATCH_SIZE = cfg["main_run_params"]["batch_size"]
-VOCAB_SIZE = cfg["tokenizers"][cfg["main_run_params"]["tokenizer"]]["vocab_size"]
-MODEL_DIM = cfg["models"][cfg["main_run_params"]["model"]]["model_dim"]
-MAX_LEN = cfg["main_run_params"]["max_len"]
-LR = cfg["optimizers"][cfg["main_run_params"]["optimizer"]]["learning_rate"]
-if cfg["main_run_params"]["device"] == "best":
+BATCH_SIZE = cfg["main_params"]["batch_size"]
+VOCAB_SIZE = cfg["tokenizers"][cfg["main_params"]["tokenizer"]]["vocab_size"]
+MODEL_DIM = cfg["models"][cfg["main_params"]["model"]]["model_dim"]
+MAX_LEN = cfg["main_params"]["max_len"]
+LR = cfg["optimizers"][cfg["main_params"]["optimizer"]]["learning_rate"]
+if cfg["main_params"]["device"] == "best":
     if torch.cuda.is_available():
         use_device = "cuda"
     else:
@@ -32,15 +32,15 @@ if cfg["main_run_params"]["device"] == "best":
 else:
     use_device = cfg["device"]
 GLOBAL_DEVICE = torch.device(use_device)
-EPOCHS = cfg["main_run_params"]["epochs"]
+EPOCHS = cfg["main_params"]["epochs"]
 
-BETA_1 = cfg["optimizers"][cfg["main_run_params"]["optimizer"]]["beta_1"]
-BETA_2 = cfg["optimizers"][cfg["main_run_params"]["optimizer"]]["beta_2"]
-EPS = cfg["optimizers"][cfg["main_run_params"]["optimizer"]]["eps"]
+BETA_1 = cfg["optimizers"][cfg["main_params"]["optimizer"]]["beta_1"]
+BETA_2 = cfg["optimizers"][cfg["main_params"]["optimizer"]]["beta_2"]
+EPS = cfg["optimizers"][cfg["main_params"]["optimizer"]]["eps"]
 
-GRAD_NORM = cfg["main_run_params"]["grad_norm"]
-TRAIN_PRINT_BATCHES = cfg["main_run_params"]["train_status_print"]
-VAL_PRINT_BATCHES = cfg["main_run_params"]["validation_status_print"]
+GRAD_NORM = cfg["main_params"]["grad_norm"]
+TRAIN_PRINT_BATCHES = cfg["main_params"]["train_status_print"]
+VAL_PRINT_BATCHES = cfg["main_params"]["validation_status_print"]
 
 
 def train_loop(
@@ -337,11 +337,11 @@ def main():
         "classification_head": classification_head
     }).to(device=use_device)
 
-    if cfg["main_run_params"]["checkpoint_path"] != "":
+    if cfg["main_params"]["checkpoint_path"] != "":
         full_model_dict.load_state_dict(
-            torch.load(os.path.join(cfg["main_run_params"]["checkpoint_path"], "full_model.state_dict"))
+            torch.load(os.path.join(cfg["main_params"]["checkpoint_path"], "full_model.state_dict"))
         )
-        print("CHECKPOINT: Loaded full model state dict from {}".format(cfg["main_run_params"]["checkpoint_path"]))
+        print("CHECKPOINT: Loaded full model state dict from {}".format(cfg["main_params"]["checkpoint_path"]))
 
     loss_fn = nn.CrossEntropyLoss(ignore_index=PAD_TOKEN).to(device=use_device)
 
@@ -351,11 +351,11 @@ def main():
                                           eps=EPS,
                                           )
 
-    if cfg["main_run_params"]["checkpoint_path"] != "":
+    if cfg["main_params"]["checkpoint_path"] != "":
         main_optimizer_fn.load_state_dict(
-            torch.load(os.path.join(cfg["main_run_params"]["checkpoint_path"], "optimizer.state_dict"))
+            torch.load(os.path.join(cfg["main_params"]["checkpoint_path"], "optimizer.state_dict"))
         )
-        print("CHECKPOINT: Loaded optimizer state dict from {}".format(cfg["main_run_params"]["checkpoint_path"]))
+        print("CHECKPOINT: Loaded optimizer state dict from {}".format(cfg["main_params"]["checkpoint_path"]))
 
     gigaword_ds = custom_dataloader.load_gigaword(cfg["general"]["datasets_directory"],
                                                   **cfg["datasets"]["gigaword"]
