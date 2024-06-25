@@ -4,12 +4,11 @@ import json
 import os
 
 
-def save_loaded_dataset(datasets_directory: str,
-                        dataset_name: str,
-                        loaded_dataset_name: str,
-                        cached_dataset: DatasetDict
-                        ):
-
+def dataset_to_csv(datasets_directory: str,
+                   dataset_name: str,
+                   loaded_dataset_name: str,
+                   cached_dataset: DatasetDict
+                   ):
     for split in cached_dataset.keys():
         cached_dataset[split].to_csv(
             os.path.join(datasets_directory,
@@ -19,7 +18,7 @@ def save_loaded_dataset(datasets_directory: str,
 
 
 def load_gigaword(datasets_directory: str,
-                  name,
+                  name: Optional[str] = "gigaword",
                   force_download: Optional[bool] = False,
                   num_proc: Optional[int] = None,
                   trust_remote_code: Optional[bool] = False,
@@ -37,9 +36,23 @@ def load_gigaword(datasets_directory: str,
     return dataset
 
 
-supported_datasets = {
-    "gigaword": load_gigaword
-}
+def load_billsum(datasets_directory: str,
+                 name: Optional[str] = "billsum",
+                 force_download: Optional[bool] = False,
+                 num_proc: Optional[int] = None,
+                 trust_remote_code: Optional[bool] = False,
+                 streaming: Optional[bool] = False
+                 ):
+    download_mode = DownloadMode.FORCE_REDOWNLOAD if force_download else DownloadMode.REUSE_DATASET_IF_EXISTS
+
+    dataset = load_dataset(path=name,
+                           download_mode=download_mode,
+                           trust_remote_code=trust_remote_code,
+                           num_proc=num_proc,
+                           cache_dir=os.path.join(datasets_directory, name, "cache"),
+                           streaming=streaming
+                           )
+
 
 # if __name__ == "__main__":
 #     with (open("cfg.json") as file):

@@ -3,7 +3,7 @@ from typing import Union, Optional
 import sentencepiece as spm
 import json
 import os
-from my_utils import generate_directories
+from utils import generate_directories
 
 
 def get_sentencepiece_model(tokenizers_directory: str,

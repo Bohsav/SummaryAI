@@ -5,12 +5,9 @@ import torch
 from torch import nn
 from torch.utils import data
 import datasets
-import custom_dataloader
-import custom_model
+from proj import dataloader, model, tokenizer, utils
 from torch.nn.utils.rnn import pad_sequence
 import datetime
-import custom_tokenizer
-import my_utils
 import os
 
 with open("config.yaml", "r") as f:
@@ -57,8 +54,8 @@ def train_loop(
     transformer = model_dict["transformer"]
     batch_size = training_dataloader.batch_size
     # Training statistics
-    total_avg_loss = my_utils.OnlineAvg()
-    temp_avg_loss = my_utils.OnlineAvg()
+    total_avg_loss = utils.OnlineAvg()
+    temp_avg_loss = utils.OnlineAvg()
     for batch_idx, (doc_batch, summary_batch, doc_pad_mask, summary_pad_batch) in enumerate(training_dataloader):
         optim.zero_grad()
         # Shape: S, N
@@ -139,11 +136,11 @@ def validation_loop(model_dict: torch.nn.ModuleDict,
         batch_size = val_dataloader.batch_size
         # Test statistics
         # AutoRegressive aka iterative token prediction
-        total_ar_loss_avg = my_utils.OnlineAvg()
-        per_token_ar_loss_avg = my_utils.OnlineAvg()
+        total_ar_loss_avg = utils.OnlineAvg()
+        per_token_ar_loss_avg = utils.OnlineAvg()
         # TeacherEnforced aka evaluate training procedure
-        total_te_loss_avg = my_utils.OnlineAvg()
-        temp_te_loss_avg = my_utils.OnlineAvg()
+        total_te_loss_avg = utils.OnlineAvg()
+        temp_te_loss_avg = utils.OnlineAvg()
         for batch_idx, (doc_batch, summary_batch, doc_pad_batch, sum_pad_batch) in enumerate(val_dataloader):
             # Sd N
             doc_batch = doc_batch.to(device=all_device)
@@ -315,21 +312,21 @@ class CustomDataset(data.Dataset):
 
 
 def main():
-    tokenizer = custom_tokenizer.get_sentencepiece_model(
+    tokenizer_mod = tokenizer.get_sentencepiece_model(
         **cfg["general"],
         **cfg["tokenizers"]["sentencepiece"]
     )
 
-    embedder = custom_model.TransformerEmbedding(vocab_size=VOCAB_SIZE,
-                                                 model_dim=MODEL_DIM,
-                                                 max_len=MAX_LEN,
-                                                 padding_idx=PAD_TOKEN,
-                                                 learnable_pos_embeddings=False
-                                                 )
+    embedder = model.TransformerEmbedding(vocab_size=VOCAB_SIZE,
+                                          model_dim=MODEL_DIM,
+                                          max_len=MAX_LEN,
+                                          padding_idx=PAD_TOKEN,
+                                          learnable_pos_embeddings=False
+                                          )
 
     classification_head = nn.Linear(MODEL_DIM, VOCAB_SIZE)
 
-    transformer = custom_model.BaseTransformerModel(batch_first=False)
+    transformer = model.BaseTransformerModel(batch_first=False)
 
     full_model_dict = torch.nn.ModuleDict({
         "embedder": embedder,
@@ -357,12 +354,12 @@ def main():
         )
         print("CHECKPOINT: Loaded optimizer state dict from {}".format(cfg["main_params"]["checkpoint_path"]))
 
-    gigaword_ds = custom_dataloader.load_gigaword(cfg["general"]["datasets_directory"],
+    gigaword_ds = dataloader.load_gigaword(cfg["general"]["datasets_directory"],
                                                   **cfg["datasets"]["gigaword"]
                                                   )
 
     train_ds = CustomDataset(gigaword_ds["train"],
-                             tokenizer.Encode,
+                             tokenizer_mod.Encode,
                              True,
                              True,
                              sos_token=SOS_TOKEN,
@@ -377,7 +374,7 @@ def main():
                                        )
 
     validation_ds = CustomDataset(gigaword_ds["validation"],
-                                  tokenizer.Encode,
+                                  tokenizer_mod.Encode,
                                   True,
                                   True,
                                   sos_token=SOS_TOKEN,
@@ -419,7 +416,7 @@ def main():
     finally:
         # Persist
         date_folder = "{}".format(datetime.date.today())
-        my_utils.generate_directories(
+        utils.generate_directories(
             {"runs" :
                  {date_folder :
                       {}
@@ -444,11 +441,11 @@ def main():
                 info_file.write("Training finished. ")
 
         with open(os.path.join(pathing, "kwargs.json"), "w", encoding="utf-8") as file:
-            json.dump({
+            yaml.dump({
                 "embedder": embedder.kwargs,
                 "transformer": transformer.kwargs,
                 "cfg": cfg
-            }, file, ensure_ascii=False, indent=4)
+            }, file, yaml.Dumper)
 
         torch.save(main_optimizer_fn.state_dict(), os.path.join(pathing, "optimizer.state_dict"))
         torch.save(full_model_dict.state_dict(), os.path.join(pathing, "full_model.state_dict"))
