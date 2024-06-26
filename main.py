@@ -5,7 +5,7 @@ import torch
 from torch import nn
 from torch.utils import data
 import datasets
-from proj import dataloader, model, tokenizer, utils
+import proj
 from torch.nn.utils.rnn import pad_sequence
 import datetime
 import os
@@ -46,7 +46,9 @@ def train_loop(
         optim: torch.optim.Optimizer,
         training_dataloader: data.DataLoader,
         dataset_length: int,
-        all_device: Union[str, torch.device]
+        all_device: Union[str, torch.device],
+        grad_norm: float,
+        print_every_batches: int
 ):
     model_dict.train()
     classification_head = model_dict["classification_head"]
@@ -54,8 +56,8 @@ def train_loop(
     transformer = model_dict["transformer"]
     batch_size = training_dataloader.batch_size
     # Training statistics
-    total_avg_loss = utils.OnlineAvg()
-    temp_avg_loss = utils.OnlineAvg()
+    total_avg_loss = proj.utils.OnlineAvg()
+    temp_avg_loss = proj.utils.OnlineAvg()
     for batch_idx, (doc_batch, summary_batch, doc_pad_mask, summary_pad_batch) in enumerate(training_dataloader):
         optim.zero_grad()
         # Shape: S, N
@@ -106,10 +108,10 @@ def train_loop(
         temp_avg_loss.increment(loss_val.item(), batch_size)
 
         loss_val.backward()
-        nn.utils.clip_grad_norm_(model_dict.parameters(), GRAD_NORM)
+        nn.utils.clip_grad_norm_(model_dict.parameters(), grad_norm)
         optim.step()
 
-        if batch_idx % TRAIN_PRINT_BATCHES == 0:
+        if batch_idx % print_every_batches == 0:
             print(">Status:")
             print(">Current time = {}".format(datetime.datetime.now()))
             print(">Batch idx = {}".format(batch_idx))
@@ -126,7 +128,8 @@ def validation_loop(model_dict: torch.nn.ModuleDict,
                     loss_fn: torch.nn.CrossEntropyLoss,
                     val_dataloader: torch.utils.data.DataLoader,
                     dataset_length: int,
-                    all_device: Union[torch.device, str]
+                    all_device: Union[torch.device, str],
+                    print_every_batches: int
                     ):
     model_dict.eval()
     with torch.no_grad():
@@ -136,11 +139,11 @@ def validation_loop(model_dict: torch.nn.ModuleDict,
         batch_size = val_dataloader.batch_size
         # Test statistics
         # AutoRegressive aka iterative token prediction
-        total_ar_loss_avg = utils.OnlineAvg()
-        per_token_ar_loss_avg = utils.OnlineAvg()
+        total_ar_loss_avg = proj.utils.OnlineAvg()
+        per_token_ar_loss_avg = proj.utils.OnlineAvg()
         # TeacherEnforced aka evaluate training procedure
-        total_te_loss_avg = utils.OnlineAvg()
-        temp_te_loss_avg = utils.OnlineAvg()
+        total_te_loss_avg = proj.utils.OnlineAvg()
+        temp_te_loss_avg = proj.utils.OnlineAvg()
         for batch_idx, (doc_batch, summary_batch, doc_pad_batch, sum_pad_batch) in enumerate(val_dataloader):
             # Sd N
             doc_batch = doc_batch.to(device=all_device)
@@ -236,7 +239,7 @@ def validation_loop(model_dict: torch.nn.ModuleDict,
 
             total_te_loss_avg.increment(loss_val.item(), batch_size)
 
-            if batch_idx % VAL_PRINT_BATCHES == 0:
+            if batch_idx % print_every_batches == 0:
                 print(">Status:")
                 print(">Current time = {}".format(datetime.datetime.now()))
                 print(">Batch idx = {}".format(batch_idx))
@@ -254,22 +257,25 @@ def validation_loop(model_dict: torch.nn.ModuleDict,
                 print(">Autoregressive total average loss: {}".format(total_ar_loss_avg))
 
 
-def custom_collate_fn(batch):
-    doc_tensors = []
-    summary_tensors = []
-    for tensor_pair in batch:
-        doc_tensor, summary_tensor = tensor_pair
-        doc_tensors.append(doc_tensor)
-        summary_tensors.append(summary_tensor)
+def get_collate_fn(pad_token_idx: Optional[int] = 0):
+    def custom_collate_fn(batch):
+        doc_tensors = []
+        summary_tensors = []
+        for tensor_pair in batch:
+            doc_tensor, summary_tensor = tensor_pair
+            doc_tensors.append(doc_tensor)
+            summary_tensors.append(summary_tensor)
 
-    doc_tensors = pad_sequence(doc_tensors)
-    summary_tensors = pad_sequence(summary_tensors)
+        doc_tensors = pad_sequence(doc_tensors)
+        summary_tensors = pad_sequence(summary_tensors)
 
-    # noinspection PyTypeChecker
-    doc_padding_tensors = torch.where(doc_tensors == PAD_TOKEN, 1, 0).transpose(0, 1)
-    # noinspection PyTypeChecker
-    sum_padding_tensors = torch.where(summary_tensors == PAD_TOKEN, 1, 0).transpose(0, 1)
-    return doc_tensors, summary_tensors, doc_padding_tensors, sum_padding_tensors
+        # noinspection PyTypeChecker
+        doc_padding_tensors = torch.where(doc_tensors == pad_token_idx, 1, 0).transpose(0, 1)
+        # noinspection PyTypeChecker
+        sum_padding_tensors = torch.where(summary_tensors == pad_token_idx, 1, 0).transpose(0, 1)
+        return doc_tensors, summary_tensors, doc_padding_tensors, sum_padding_tensors
+
+    return custom_collate_fn
 
 
 class CustomDataset(data.Dataset):
@@ -309,6 +315,25 @@ class CustomDataset(data.Dataset):
 
     def __len__(self):
         return self.ds.__len__()
+
+
+class Main:
+    # tokenizer: object
+    # embedder: nn.Module
+    # model: nn.Module
+    # classificator_head: nn.Module
+    # optimizer_fn: torch.optim.Optimizer
+    def __init__(self,
+                 cfg_path: Optional[str] = "config.yaml"
+                 ):
+        pass
+
+    @staticmethod
+    def init_from(directory: str):
+        pass
+
+    def __call__(self):
+        pass
 
 
 def main():

@@ -1,7 +1,9 @@
-from typing import Optional, Union
+from typing import Optional, Union, BinaryIO
 import torch
 from torch import nn
 import math
+import os
+import yaml
 
 
 def generate_decoder_mask(size: int, device: Union[str, torch.device]) -> torch.Tensor:
@@ -28,6 +30,20 @@ class SinusoidalPositionalEncoding(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.pe[:x.size(0), :]
 
+    def get_memento(self):
+        return {
+            "name": "SPE",
+            "kwargs": self.kwargs,
+            "state_dict": self.state_dict()
+        }
+
+    def save_memento(self, file: BinaryIO):
+        torch.save(self.get_memento(), file)
+
+    @staticmethod
+    def load_from(memento, strict: bool = True, assign: bool = False):
+        return SinusoidalPositionalEncoding(**memento["kwargs"]).load_state_dict(memento["state_dict"], strict, assign)
+
 
 class LearnablePositionalEncoding(nn.Module):
     def __init__(self, model_dim: int, max_len: int, padding_idx: int, *args, **kwargs):
@@ -42,6 +58,20 @@ class LearnablePositionalEncoding(nn.Module):
         seq_len, batch_size = x.size()
         pos_idx = torch.arange(0, seq_len, dtype=torch.long, device=x.device).unsqueeze(1).repeat(1, batch_size)
         return self.pos_embed(pos_idx)
+
+    def get_memento(self):
+        return {
+            "name": "LPE",
+            "kwargs": self.kwargs,
+            "state_dict": self.state_dict()
+        }
+
+    def save_memento(self, file: BinaryIO):
+        torch.save(self.get_memento(), file)
+
+    @staticmethod
+    def load_from(memento, strict: bool = True, assign: bool = False):
+        return LearnablePositionalEncoding(**memento["kwargs"]).load_state_dict(memento["state_dict"], strict, assign)
 
 
 class TransformerEmbedding(nn.Module):
@@ -76,6 +106,20 @@ class TransformerEmbedding(nn.Module):
         tokens = self.token_embed(x)
         positions = self.pos_embed(x)
         return self.dropout(tokens+positions)
+
+    def get_memento(self):
+        return {
+            "name": "TE",
+            "kwargs": self.kwargs,
+            "state_dict": self.state_dict()
+        }
+
+    def save_memento(self, file: BinaryIO):
+        torch.save(self.get_memento(), file)
+
+    @staticmethod
+    def load_from(memento, strict: bool = True, assign: bool = False):
+        return TransformerEmbedding(**memento["kwargs"]).load_state_dict(memento["state_dict"], strict, assign)
 
 
 class BaseTransformerModel(nn.Module):
@@ -168,3 +212,17 @@ class BaseTransformerModel(nn.Module):
 
         return self.decode(tgt, memory, tgt_attn_mask, memory_attn_mask, tgt_padding_mask, memory_padding_mask,
                            is_tgt_attn_mask_causal, is_memory_attn_mask_causal)
+
+    def get_memento(self):
+        return {
+            "name": "Transformer",
+            "kwargs": self.kwargs,
+            "state_dict": self.state_dict()
+        }
+
+    def save_memento(self, file: BinaryIO):
+        torch.save(self.get_memento(), file)
+
+    @staticmethod
+    def load_from(memento, strict: bool = True, assign: bool = False):
+        return BaseTransformerModel(**memento["kwargs"]).load_state_dict(memento["state_dict"], strict, assign)

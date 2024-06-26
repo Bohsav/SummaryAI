@@ -53,6 +53,10 @@ def load_billsum(datasets_directory: str,
                            streaming=streaming
                            )
 
+recognized_datasets = {
+    "billsum": load_billsum,
+    "gigaword": load_gigaword
+}
 
 # if __name__ == "__main__":
 #     with (open("cfg.json") as file):

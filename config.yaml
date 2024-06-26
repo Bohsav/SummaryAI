@@ -14,7 +14,12 @@ datasets:
         num_workers: 4
         trust_remote_code: false
         stream: false
-        create_csv: true
+    - billsum:
+          name: "billsum"
+          force_download: false
+          num_workers: 4
+          trust_remote_code: false
+          stream: false
 
 tokenizers:
     - sentencepiece:
