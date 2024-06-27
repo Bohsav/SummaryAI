@@ -57,8 +57,35 @@ class ConfigFileInterpreter:
             eps=self.cfg_file["optimizers"][self.cfg_file["main_params"]["optimizer"]]["eps"]
         )
 
-    def get_dataset(self, dataset_name):
-        return proj.dataloader.recognized_datasets[dataset_name](
+    def get_dataset(self):
+        return proj.dataloader.recognized_datasets[self.cfg_file["general"]["current_dataset"]](
             self.cfg_file["general"]["datasets_directory"],
-            **self.cfg_file["datasets"][dataset_name]
+            **self.cfg_file["datasets"]["current_dataset"]
         )
+
+    def get_epochs(self):
+        return self.cfg_file["main_params"]["epochs"]
+
+    def get_config(self):
+        return self.cfg_file
+
+    def get_eos_token(self):
+        return self.cfg_file["general"]["eos_token"]
+
+    def get_pad_token(self):
+        return self.cfg_file["general"]["pad_token"]
+
+    def get_sos_token(self):
+        return self.cfg_file["general"]["sos_token"]
+
+    def get_batch_size(self):
+        return self.cfg_file["main_params"]["batch_size"]
+
+    def get_grad_norm(self):
+        return self.cfg_file["main_params"]["grad_norm"]
+
+    def get_train_freq_print(self):
+        return self.cfg_file["main_params"]["train_print_batches"]
+
+    def get_val_freq_print(self):
+        return self.cfg_file["main_params"]["validation_print_batches"]

@@ -1,3 +1,4 @@
+import pickle
 import traceback
 from typing import Optional, Union
 import yaml
@@ -9,35 +10,6 @@ import proj
 from torch.nn.utils.rnn import pad_sequence
 import datetime
 import os
-
-with open("config.yaml", "r") as f:
-    cfg = yaml.load(f, yaml.Loader)
-PAD_TOKEN = cfg["general"]["pad_token"]
-SOS_TOKEN = cfg["general"]["sos_token"]
-EOS_TOKEN = cfg["general"]["eos_token"]
-UNK_TOKEN = cfg["general"]["unk_token"]
-BATCH_SIZE = cfg["main_params"]["batch_size"]
-VOCAB_SIZE = cfg["tokenizers"][cfg["main_params"]["tokenizer"]]["vocab_size"]
-MODEL_DIM = cfg["models"][cfg["main_params"]["model"]]["model_dim"]
-MAX_LEN = cfg["main_params"]["max_len"]
-LR = cfg["optimizers"][cfg["main_params"]["optimizer"]]["learning_rate"]
-if cfg["main_params"]["device"] == "best":
-    if torch.cuda.is_available():
-        use_device = "cuda"
-    else:
-        use_device = "cpu"
-else:
-    use_device = cfg["device"]
-GLOBAL_DEVICE = torch.device(use_device)
-EPOCHS = cfg["main_params"]["epochs"]
-
-BETA_1 = cfg["optimizers"][cfg["main_params"]["optimizer"]]["beta_1"]
-BETA_2 = cfg["optimizers"][cfg["main_params"]["optimizer"]]["beta_2"]
-EPS = cfg["optimizers"][cfg["main_params"]["optimizer"]]["eps"]
-
-GRAD_NORM = cfg["main_params"]["grad_norm"]
-TRAIN_PRINT_BATCHES = cfg["main_params"]["train_status_print"]
-VAL_PRINT_BATCHES = cfg["main_params"]["validation_status_print"]
 
 
 def train_loop(
@@ -318,165 +290,144 @@ class CustomDataset(data.Dataset):
 
 
 class Main:
-    # tokenizer: object
-    # embedder: nn.Module
-    # model: nn.Module
-    # classificator_head: nn.Module
-    # optimizer_fn: torch.optim.Optimizer
+    # Initialize everything including saving directory. Do first persistence of all objects as a pre-flight check
+    # If there is a special "final" sub-directory -> start from it
     def __init__(self,
-                 cfg_path: Optional[str] = "config.yaml"
+                 cfg_path: Optional[str] = "config.yaml",
+                 main_directory: Optional[str] = "main",
+                 storage_directory_path: Optional[str] = "storage"
                  ):
-        pass
+        cfg_path = os.path.join(cfg_path)
 
-    @staticmethod
-    def init_from(directory: str):
-        pass
+        self.main_dir = main_directory
+
+        self.storage_path = os.path.join(storage_directory_path)
+        os.makedirs(self.storage_path, exist_ok=True)
+
+        os.mkdir(os.path.join(self.storage_path, main_directory))
+
+        with open(cfg_path) as f:
+            self.cfg_inter = proj.config.ConfigFileInterpreter(yaml.load(f, yaml.Loader))
+
+        self.embedder = self.cfg_inter.get_embedder()
+        self.model = self.cfg_inter.get_model()
+        self.classification_head = self.cfg_inter.get_classification_head()
+        self.full_stack = nn.ModuleDict({
+            "embedder": self.embedder,
+            "transformer": self.model,
+            "classification_head": self.classification_head
+        })
+
+        self.optimizer = self.cfg_inter.get_optimizer(self.full_stack.parameters())
+        self.tokenizer = self.cfg_inter.get_sentencepiece_tokenizer()
+        self.dataset = self.cfg_inter.get_dataset()
+
+        self.loss_fn = nn.CrossEntropyLoss()
+
+        self.metadata = {
+            "run_count": 0,
+            "epoch": 0,
+            "final_dir": "run0"
+        }
+
+        if os.path.join(self.storage_path, main_directory, "config.yaml") == cfg_path:
+            with open(os.path.join(self.storage_path, main_directory, "metadata.yaml")) as f:
+                self.metadata = yaml.load(f, yaml.Loader)
+
+            self.epoch = self.metadata["epoch"]
+
+            load_path = os.path.join(self.storage_path, main_directory, self.metadata["final_dir"])
+            self.model.load_state_dict(
+                torch.load(os.path.join(load_path, "model.param"))
+            )
+            self.embedder.load_state_dict(
+                torch.load(os.path.join(load_path, "embedder.param"))
+            )
+            self.classification_head.load_state_dict(
+                torch.load(os.path.join(load_path, "classification_head.param"))
+            )
+            self.optimizer.load_state_dict(
+                torch.load(os.path.join(load_path, "optimizer.param"))
+            )
+
+        else:
+            with open(os.path.join(self.storage_path, main_directory, "config.yaml")) as f:
+                yaml.dump(self.cfg_inter.get_config(), f, yaml.Dumper)
 
     def __call__(self):
-        pass
-
-
-def main():
-    tokenizer_mod = tokenizer.get_sentencepiece_model(
-        **cfg["general"],
-        **cfg["tokenizers"]["sentencepiece"]
-    )
-
-    embedder = model.TransformerEmbedding(vocab_size=VOCAB_SIZE,
-                                          model_dim=MODEL_DIM,
-                                          max_len=MAX_LEN,
-                                          padding_idx=PAD_TOKEN,
-                                          learnable_pos_embeddings=False
-                                          )
-
-    classification_head = nn.Linear(MODEL_DIM, VOCAB_SIZE)
-
-    transformer = model.BaseTransformerModel(batch_first=False)
-
-    full_model_dict = torch.nn.ModuleDict({
-        "embedder": embedder,
-        "transformer": transformer,
-        "classification_head": classification_head
-    }).to(device=use_device)
-
-    if cfg["main_params"]["checkpoint_path"] != "":
-        full_model_dict.load_state_dict(
-            torch.load(os.path.join(cfg["main_params"]["checkpoint_path"], "full_model.state_dict"))
+        train_split = CustomDataset(
+            self.dataset["train"],
+            self.tokenizer.encode,
+            True,
+            True,
+            sos_token=self.cfg_inter.get_sos_token(),
+            eos_token=self.cfg_inter.get_eos_token()
         )
-        print("CHECKPOINT: Loaded full model state dict from {}".format(cfg["main_params"]["checkpoint_path"]))
-
-    loss_fn = nn.CrossEntropyLoss(ignore_index=PAD_TOKEN).to(device=use_device)
-
-    main_optimizer_fn = torch.optim.AdamW(full_model_dict.parameters(),
-                                          lr=LR,
-                                          betas=(BETA_1, BETA_2),
-                                          eps=EPS,
-                                          )
-
-    if cfg["main_params"]["checkpoint_path"] != "":
-        main_optimizer_fn.load_state_dict(
-            torch.load(os.path.join(cfg["main_params"]["checkpoint_path"], "optimizer.state_dict"))
+        validation_split = CustomDataset(
+            self.dataset["validation"],
+            self.tokenizer.encode,
+            True,
+            True,
+            sos_token=self.cfg_inter.get_sos_token(),
+            eos_token=self.cfg_inter.get_eos_token()
         )
-        print("CHECKPOINT: Loaded optimizer state dict from {}".format(cfg["main_params"]["checkpoint_path"]))
 
-    gigaword_ds = dataloader.load_gigaword(cfg["general"]["datasets_directory"],
-                                                  **cfg["datasets"]["gigaword"]
-                                                  )
-
-    train_ds = CustomDataset(gigaword_ds["train"],
-                             tokenizer_mod.Encode,
-                             True,
-                             True,
-                             sos_token=SOS_TOKEN,
-                             eos_token=EOS_TOKEN
-                             )
-
-    train_dataloader = data.DataLoader(train_ds,
-                                       batch_size=BATCH_SIZE,
-                                       shuffle=True,
-                                       collate_fn=custom_collate_fn,
-                                       drop_last=True
-                                       )
-
-    validation_ds = CustomDataset(gigaword_ds["validation"],
-                                  tokenizer_mod.Encode,
-                                  True,
-                                  True,
-                                  sos_token=SOS_TOKEN,
-                                  eos_token=EOS_TOKEN
-                                  )
-
-    validation_dataloader = data.DataLoader(validation_ds,
-                                            batch_size=BATCH_SIZE,
-                                            shuffle=True,
-                                            collate_fn=custom_collate_fn,
-                                            drop_last=True
-                                            )
-
-    exception_occurred = True
-    try:
-        for epoch in range(EPOCHS):
-            print(">Epoch {}:".format(epoch + 1))
-            print(">Training...")
-            train_loop(
-                full_model_dict,
-                loss_fn,
-                main_optimizer_fn,
-                train_dataloader,
-                len(train_ds),
-                GLOBAL_DEVICE
-            )
-            print(">Validation...")
-            validation_loop(
-                full_model_dict,
-                loss_fn,
-                validation_dataloader,
-                len(validation_ds),
-                GLOBAL_DEVICE
-            )
-    except Exception as e:
-        traceback.print_exception(e)
-    else:
-        exception_occurred = False
-    finally:
-        # Persist
-        date_folder = "{}".format(datetime.date.today())
-        utils.generate_directories(
-            {"runs" :
-                 {date_folder :
-                      {}
-                 }
-            }
+        train_loader = data.DataLoader(
+            train_split,
+            batch_size=self.cfg_inter.get_batch_size(),
+            shuffle=True,
+            collate_fn=get_collate_fn(self.cfg_inter.get_pad_token()),
+            drop_last=True
         )
-        pathing = os.path.join("runs", date_folder)
-        destination_folder = "model"
-        version_counter = 0
-        while os.path.exists(os.path.join(pathing, destination_folder)):
-            destination_folder = "model{}".format(version_counter)
-            version_counter += 1
-        pathing = os.path.join(pathing, destination_folder)
-        os.mkdir(pathing)
 
-        with open(os.path.join(pathing, "info.txt"), "a") as info_file:
-            info_file.write("{}. ".format(datetime.datetime.now()))
-            info_file.write("Basic transformer trained. embedder, transformer, linear projection head. ")
-            if exception_occurred:
-                info_file.write("Stopping reason: an exception")
-            else:
-                info_file.write("Training finished. ")
+        validation_loader = data.DataLoader(
+            validation_split,
+            batch_size=self.cfg_inter.get_batch_size(),
+            shuffle=True,
+            collate_fn=get_collate_fn(self.cfg_inter.get_pad_token()),
+            drop_last=True
+        )
 
-        with open(os.path.join(pathing, "kwargs.json"), "w", encoding="utf-8") as file:
-            yaml.dump({
-                "embedder": embedder.kwargs,
-                "transformer": transformer.kwargs,
-                "cfg": cfg
-            }, file, yaml.Dumper)
+        try:
+            for epoch in range(self.metadata["epoch"], self.cfg_inter.get_epochs()):
+                self.metadata["epoch"] = epoch
+                print(">Epoch {}:".format(epoch + 1))
+                print(">Training...")
+                train_loop(
+                    self.full_stack,
+                    self.loss_fn,
+                    self.optimizer,
+                    train_loader,
+                    len(train_split),
+                    self.cfg_inter.device,
+                    self.cfg_inter.get_grad_norm(),
+                    self.cfg_inter.get_train_freq_print()
+                )
+                print(">Validation...")
+                validation_loop(
+                    self.full_stack,
+                    self.loss_fn,
+                    validation_loader,
+                    len(validation_split),
+                    self.cfg_inter.device,
+                    self.cfg_inter.get_val_freq_print()
+                )
+        finally:
+            self.metadata["run_count"] += 1
+            self.metadata["final_dir"] = "run{}".format(self.metadata["run_count"])
 
-        torch.save(main_optimizer_fn.state_dict(), os.path.join(pathing, "optimizer.state_dict"))
-        torch.save(full_model_dict.state_dict(), os.path.join(pathing, "full_model.state_dict"))
-        torch.save(transformer.state_dict(), os.path.join(pathing, "transformer.state_dict"))
-        torch.save(embedder.state_dict(), os.path.join(pathing, "embedder.state_dict"))
+            with open(os.path.join(self.storage_path, self.main_dir, "metadata.yaml"), "w") as f:
+                yaml.dump(self.metadata, f, yaml.Dumper)
+
+            save_path = os.path.join(self.storage_path, self.main_dir, self.metadata["final_dir"])
+
+            os.mkdir(save_path)
+
+            torch.save(self.embedder, os.path.join(save_path, "embedder.param"))
+            torch.save(self.model, os.path.join(save_path, "model.param"))
+            torch.save(self.classification_head, os.path.join(save_path, "classification_head.param"))
+            torch.save(self.optimizer, os.path.join(save_path, "optimizer.param"))
 
 
 if __name__ == "__main__":
-    main()
+    Main()()
