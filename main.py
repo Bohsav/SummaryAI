@@ -1,5 +1,3 @@
-import pickle
-import traceback
 from typing import Optional, Union
 import yaml
 import torch
@@ -290,8 +288,6 @@ class CustomDataset(data.Dataset):
 
 
 class Main:
-    # Initialize everything including saving directory. Do first persistence of all objects as a pre-flight check
-    # If there is a special "final" sub-directory -> start from it
     def __init__(self,
                  cfg_path: Optional[str] = "config.yaml",
                  main_directory: Optional[str] = "main",
