@@ -53,6 +53,8 @@ def load_billsum(datasets_directory: str,
                            streaming=streaming
                            )
 
+    return dataset
+
 recognized_datasets = {
     "billsum": load_billsum,
     "gigaword": load_gigaword
