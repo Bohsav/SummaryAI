@@ -1,7 +1,6 @@
-from typing import Union, Optional
+from typing import Optional
 import pickle
 import sentencepiece as spm
-import json
 import os
 
 

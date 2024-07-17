@@ -9,6 +9,8 @@ from torch.nn.utils.rnn import pad_sequence
 import datetime
 import os
 
+from proj.utils import get_collate_fn
+
 
 def train_loop(
         model_dict: torch.nn.ModuleDict,
@@ -225,27 +227,6 @@ def validation_loop(model_dict: torch.nn.ModuleDict,
                 )
                 print(">Autoregressive loss across all tokens: {}".format(per_token_ar_loss_avg))
                 print(">Autoregressive total average loss: {}".format(total_ar_loss_avg))
-
-
-def get_collate_fn(pad_token_idx: Optional[int] = 0):
-    def custom_collate_fn(batch):
-        doc_tensors = []
-        summary_tensors = []
-        for tensor_pair in batch:
-            doc_tensor, summary_tensor = tensor_pair
-            doc_tensors.append(doc_tensor)
-            summary_tensors.append(summary_tensor)
-
-        doc_tensors = pad_sequence(doc_tensors)
-        summary_tensors = pad_sequence(summary_tensors)
-
-        # noinspection PyTypeChecker
-        doc_padding_tensors = torch.where(doc_tensors == pad_token_idx, 1, 0).transpose(0, 1)
-        # noinspection PyTypeChecker
-        sum_padding_tensors = torch.where(summary_tensors == pad_token_idx, 1, 0).transpose(0, 1)
-        return doc_tensors, summary_tensors, doc_padding_tensors, sum_padding_tensors
-
-    return custom_collate_fn
 
 
 class CustomDataset(data.Dataset):

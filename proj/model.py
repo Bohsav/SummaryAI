@@ -2,8 +2,6 @@ from typing import Optional, Union, BinaryIO
 import torch
 from torch import nn
 import math
-import os
-import yaml
 
 
 def generate_decoder_mask(size: int, device: Union[str, torch.device]) -> torch.Tensor:
