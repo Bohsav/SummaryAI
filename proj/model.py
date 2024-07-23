@@ -224,3 +224,6 @@ class BaseTransformerModel(nn.Module):
     @staticmethod
     def load_from(memento, strict: bool = True, assign: bool = False):
         return BaseTransformerModel(**memento["kwargs"]).load_state_dict(memento["state_dict"], strict, assign)
+
+
+
