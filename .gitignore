@@ -11,3 +11,8 @@ notes.txt
 /runs
 .temp
 api-token
+.ipynb_checkpoints/
+.jupyter_ystore.db
+.virtual_documents/
+nohup.out
+server-pid
