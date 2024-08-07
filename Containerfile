@@ -1,14 +1,27 @@
-FROM continuumio/miniconda3
+FROM mambaorg/micromamba:jammy-cuda-12.2.2
 
 EXPOSE 8889
 
-RUN groupadd -g 1000 jupytergroup && useradd -m -u 1000 -g jupytergroup jupyteruser
-WORKDIR /home/jupyteruser
-COPY . .
+WORKDIR /home/$MAMBA_USER
+COPY --chown=$MAMBA_USER:$MAMBA_USER . .
 
-RUN conda env create -f environment.yaml
-RUN conda clean -afy
+RUN micromamba install -y -n base -f environment.yaml && \
+    micromamba clean --all --yes
 
-USER jupyteruser
+USER $MAMBA_USER
 
-ENTRYPOINT conda activate SummaryAI && jupyter-lab --no-browser --ip=0.0.0.0
+ENTRYPOINT jupyter-lab --no-browser --ip=0.0.0.0 --port=8889
+
+# EXPOSE 8889
+#
+#
+# RUN groupadd -g 1000 jupytergroup && useradd -m -u 1000 -g jupytergroup jupyteruser
+# WORKDIR /home/jupyteruser
+# COPY . .
+#
+# RUN conda env create -f environment.yaml
+# RUN conda clean -afy
+
+# USER jupyteruser
+#
+# ENTRYPOINT conda activate SummaryAI && jupyter-lab --no-browser --ip=0.0.0.0
