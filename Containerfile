@@ -1,6 +1,6 @@
 FROM continuumio/miniconda3
 
-EXPOSE 8888
+EXPOSE 8889
 
 RUN groupadd -g 1000 jupytergroup && useradd -m -u 1000 -g jupytergroup jupyteruser
 WORKDIR /home/jupyteruser

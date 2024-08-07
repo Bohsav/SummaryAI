@@ -5,6 +5,6 @@ local_datasets/
 .gitattributes
 .idea/
 Containerfile
-container-tools.sh
 __pycache__/
 README.md
+.temp/
